@@ -1,0 +1,27 @@
+Metadata-Version: 2.1
+Name: shakenfist-agent
+Version: 0.0.0
+Summary: Shaken Fist: an opinionated minimal cloud
+Home-page: https://madebymikal.com/shakenfist
+Author: Michael Still
+Author-email: mikal@stillhq.com
+License: Apache2
+Platform: UNKNOWN
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: AUTHORS
+
+Python side channel agent for Shaken Fist
+=========================================
+
+This is a python side channel in-guest agent for [Shaken Fist](https://github.com/shakenfist/shakenfist).
+
+
+
