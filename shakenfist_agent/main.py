@@ -55,11 +55,14 @@ LOG.handlers = [handler]
 def cli(ctx, verbose):
     if not ctx.obj:
         ctx.obj = {}
+    ctx.obj['LOGGER'] = LOG
 
     if verbose:
+        ctx.obj['VERBOSE'] = True
         LOG.setLevel(logging.DEBUG)
         LOG.debug('Set log level to DEBUG')
     else:
+        ctx.obj['VERBOSE'] = False
         LOG.setLevel(logging.INFO)
 
 

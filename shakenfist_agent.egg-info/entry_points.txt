@@ -1,3 +1,0 @@
-[console_scripts]
-sf-agent = shakenfist_agent.main:cli
-
