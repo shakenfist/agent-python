@@ -23,7 +23,7 @@ class SFFileAgent(protocol.FileAgent):
 
     def is_system_running(self, _packet):
         out, _ = processutils.execute(
-            'systemctl is-system-running', shell=True)
+            'systemctl is-system-running', shell=True, check_exit_code=False)
         self.send_packet({
             'command': 'is-system-running-response',
             'result': out.rstrip() == 'running'
