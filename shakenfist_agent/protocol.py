@@ -42,7 +42,8 @@ class Agent(object):
         try:
             os.write(self.output_fileno, data)
         except BlockingIOError:
-            self.log.info('Discarded write due to non-blocking IO error, no connection?')
+            self.log.info(
+                'Discarded write due to non-blocking IO error, no connection?')
             pass
 
     def set_fd_nonblocking(self, fd):
@@ -58,8 +59,8 @@ class Agent(object):
             return
 
         if time.time() - self.last_data > 5:
-            self.log.debug('Sending ping packet due to idle connection')
             for pt in self.poll_tasks:
+                self.log.debug('Sending %s poll due to idle connection' % pt)
                 pt()
             self.last_data = time.time()
 
@@ -107,7 +108,7 @@ class Agent(object):
             self._command_map[command](packet)
         else:
             self.log.debug('Could not find command "%s" in %s'
-                           %(command, self._command_map.keys()))
+                           % (command, self._command_map.keys()))
             raise UnknownCommand('Command %s is unknown' % command)
 
     def noop(self, packet):
