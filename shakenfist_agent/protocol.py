@@ -23,7 +23,7 @@ class Agent(object):
         }
 
         self.log = logger
-        self.poll_tasks = [self.send_ping]
+        self.poll_tasks = []
 
     def _read(self):
         d = None
@@ -35,15 +35,17 @@ class Agent(object):
 
         if d:
             self.last_data = time.time()
-            self.log.debug('Read: %s' % d)
+            if self.log:
+                self.log.debug('Read: %s' % d)
         return d
 
     def _write(self, data):
         try:
             os.write(self.output_fileno, data)
         except BlockingIOError:
-            self.log.info(
-                'Discarded write due to non-blocking IO error, no connection?')
+            if self.log:
+                self.log.info(
+                    'Discarded write due to non-blocking IO error, no connection?')
             pass
 
     def set_fd_nonblocking(self, fd):
@@ -51,21 +53,29 @@ class Agent(object):
         fcntl.fcntl(fd, fcntl.F_SETFL, oflags | os.O_NONBLOCK)
 
     def add_command(self, name, meth):
-        self.log.debug('Registered command %s' % name)
+        if self.log:
+            self.log.debug('Registered command %s' % name)
         self._command_map[name] = meth
 
     def poll(self):
         if not self.received_any_data:
             return
 
+        pts = self.poll_tasks
+        if not pts:
+            pts = [self.send_ping]
+
         if time.time() - self.last_data > 5:
-            for pt in self.poll_tasks:
-                self.log.debug('Sending %s poll due to idle connection' % pt)
+            for pt in pts:
+                if self.log:
+                    self.log.debug(
+                        'Sending %s poll due to idle connection' % pt)
                 pt()
             self.last_data = time.time()
 
     def close(self):
-        self.log.debug('Cleaning up connection for graceful close.')
+        if self.log:
+            self.log.debug('Cleaning up connection for graceful close.')
         os.close(self.input_fileno)
         os.close(self.output_fileno)
 
@@ -78,7 +88,14 @@ class Agent(object):
         j = json.dumps(p)
         packet = '%s[%d]%s' % (self.PREAMBLE, len(j), j)
         self._write(packet.encode('utf-8'))
-        self.log.debug('Sent: %s' % packet)
+        if self.log:
+            self.log.debug('Sent: %s' % packet)
+
+    def find_packets(self):
+        packet = self.find_packet()
+        while packet:
+            yield packet
+            packet = self.find_packet()
 
     def find_packet(self):
         d = self._read()
@@ -90,34 +107,39 @@ class Agent(object):
             return None
 
         blen = len(self.buffer)
-        if blen < offset + 13:
+        if blen < offset + 12:
             return None
 
         plen = int(self.buffer[offset + 9: offset + 11])
-        if blen < offset + 13 + plen:
+        if blen < offset + 12 + plen:
             return None
 
         packet = self.buffer[offset + 12: offset + 12 + plen]
-        self.buffer = self.buffer[offset + 13 + plen:]
+        self.buffer = self.buffer[offset + 12 + plen:]
         return json.loads(packet.decode('utf-8'))
 
     def dispatch_packet(self, packet):
-        self.log.debug('Processing: %s' % packet)
+        if self.log:
+            self.log.debug('Processing: %s' % packet)
         command = packet.get('command')
         if command in self._command_map:
             self._command_map[command](packet)
         else:
-            self.log.debug('Could not find command "%s" in %s'
-                           % (command, self._command_map.keys()))
+            if self.log:
+                self.log.debug('Could not find command "%s" in %s'
+                               % (command, self._command_map.keys()))
             raise UnknownCommand('Command %s is unknown' % command)
 
     def noop(self, packet):
         return
 
-    def send_ping(self):
+    def send_ping(self, unique=None):
+        if not unique:
+            unique = random.randint(0, 65535)
+
         self.send_packet({
             'command': 'ping',
-            'unique': random.randint(0, 65535)
+            'unique': unique
         })
 
     def send_pong(self, packet):

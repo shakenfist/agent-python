@@ -24,9 +24,10 @@ class SFFileAgent(protocol.FileAgent):
     def is_system_running(self, _packet):
         out, _ = processutils.execute(
             'systemctl is-system-running', shell=True, check_exit_code=False)
+        out = out.rstrip()
         self.send_packet({
             'command': 'is-system-running-response',
-            'result': out.rstrip() == 'running',
+            'result': out == 'running',
             'message': out
         })
 
@@ -41,8 +42,7 @@ def daemon_run(ctx):
     channel.send_ping()
 
     while True:
-        packet = channel.find_packet()
-        if packet:
+        for packet in channel.find_packets():
             try:
                 channel.dispatch_packet(packet)
             except protocol.UnknownCommand as e:
