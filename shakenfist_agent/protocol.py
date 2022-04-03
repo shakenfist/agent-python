@@ -61,11 +61,11 @@ class Agent(object):
         if not self.received_any_data:
             return
 
-        pts = self.poll_tasks
-        if not pts:
-            pts = [self.send_ping]
-
         if time.time() - self.last_data > 5:
+            pts = self.poll_tasks
+            if not pts:
+                pts = [self.send_ping]
+
             for pt in pts:
                 if self.log:
                     self.log.debug(
