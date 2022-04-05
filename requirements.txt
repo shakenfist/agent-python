@@ -3,3 +3,5 @@ tox                 # mit
 flake8              # mit
 testtools           # mit
 oslo.concurrency    # apache2
+distro              # apache2
+linux-utils         # mit

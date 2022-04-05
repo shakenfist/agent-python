@@ -1,4 +1,6 @@
 import click
+import distro
+import linux_utils
 import os
 from oslo_concurrency import processutils
 import sys
@@ -29,6 +31,32 @@ class SFFileAgent(protocol.FileAgent):
             'command': 'is-system-running-response',
             'result': out == 'running',
             'message': out
+        })
+
+    def gather_facts(self, _packet):
+        facts = {
+            'distribution': distro.info(),
+            'mounts': [],
+            'ssh-host-keys': {}
+        }
+
+        for entry in linux_utils.fstab.find_mounted_filesystems():
+            facts['mounts'].append({
+                'device': entry.device,
+                'mount_point': entry.mount_point,
+                'vfs_type': entry.vfs_type
+            })
+
+        for kind, path in [('rsa', '/etc/ssh/ssh_host_rsa_key.pub'),
+                           ('ecdsa',  '/etc/ssh/ssh_host_ecdsa_key.pub'),
+                           ('ed25519', '/etc/ssh/ssh_host_ed25519_key.pub')]:
+            if os.path.exists(path):
+                with open(path) as f:
+                    facts['ssh-host-keys'][kind] = f.read()
+
+        self.send_packet({
+            'command': 'gater-facts-response',
+            'result': facts
         })
 
 
