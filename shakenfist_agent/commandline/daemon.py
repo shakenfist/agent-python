@@ -1,3 +1,4 @@
+import base64
 import click
 import distro
 import linux_utils
@@ -21,6 +22,8 @@ class SFFileAgent(protocol.FileAgent):
         super(SFFileAgent, self).__init__(path, logger=logger)
 
         self.add_command('is-system-running', self.is_system_running)
+        self.add_command('gather-facts', self.gather_facts)
+        self.add_command('fetch-file', self.fetch_file)
         self.log.debug('Setup complete')
 
     def is_system_running(self, _packet):
@@ -55,9 +58,77 @@ class SFFileAgent(protocol.FileAgent):
                     facts['ssh-host-keys'][kind] = f.read()
 
         self.send_packet({
-            'command': 'gater-facts-response',
+            'command': 'gather-facts-response',
             'result': facts
         })
+
+    def fetch_file(self, packet):
+        path = packet.get('path')
+        if not path:
+            self.send_packet({
+                'command': 'fetch-file-response',
+                'result': False,
+                'message': 'path is not set'
+            })
+            return
+
+        if not os.path.exists(path):
+            self.send_packet({
+                'command': 'fetch-file-response',
+                'result': False,
+                'path': path,
+                'message': 'path does not exist'
+            })
+            return
+
+        if not os.is_file(path, follow_symlinks=True):
+            self.send_packet({
+                'command': 'fetch-file-response',
+                'result': False,
+                'path': path,
+                'message': 'path is not a file'
+            })
+            return
+
+        st = os.stat(path, follow_symlinks=True)
+        self.send_packet({
+            'command': 'fetch-file-response',
+            'result': True,
+            'path': path,
+            'stat_result': {
+                'mode': st.st_mode,
+                'size': st.st_size,
+                'uid': st.st_uid,
+                'gid': st.st_gid,
+                'atime': st.st_atime,
+                'mtime': st.st_mtime,
+                'ctime': st.st_ctime
+            }
+        })
+
+        offset = 0
+        with open(path, 'rb') as f:
+            d = f.read(1024)
+            while d:
+                self.send_packet({
+                    'command': 'fetch-file-response',
+                    'result': True,
+                    'path': path,
+                    'offset': offset,
+                    'encoding': 'base64',
+                    'chunk': base64.b64encode(d).encode('utf-8')
+                })
+                offset += len(d)
+                d = f.read(1024)
+
+            self.send_packet({
+                'command': 'fetch-file-response',
+                'result': True,
+                'path': path,
+                'offset': offset,
+                'encoding': 'base64',
+                'chunk': None
+            })
 
 
 @daemon.command(name='run', help='Run the sf-agent daemon')
