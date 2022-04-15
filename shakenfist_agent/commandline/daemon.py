@@ -1,5 +1,6 @@
 import base64
 import click
+from collections import defaultdict
 import distro
 import linux_utils
 import os
@@ -141,7 +142,14 @@ def daemon_run(ctx):
     channel.send_ping()
 
     while True:
+        processed = defaultdict(int)
+
         for packet in channel.find_packets():
+            command = packet.get('command', 'none')
+            processed[command] += 1
+            if command in ['ping', 'is-system-running']:
+                continue
+
             try:
                 channel.dispatch_packet(packet)
             except protocol.UnknownCommand as e:

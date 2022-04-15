@@ -58,9 +58,6 @@ class Agent(object):
         self._command_map[name] = meth
 
     def poll(self):
-        if not self.received_any_data:
-            return
-
         if time.time() - self.last_data > 5:
             pts = self.poll_tasks
             if not pts:
