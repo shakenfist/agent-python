@@ -147,8 +147,8 @@ def daemon_run(ctx):
         for packet in channel.find_packets():
             command = packet.get('command', 'none')
             processed[command] += 1
-            if processed[command] > 1 and command in ['ping', 'is-system-running']:
-                continue
+            # if processed[command] > 1 and command in ['ping', 'is-system-running']:
+            #     continue
 
             try:
                 channel.dispatch_packet(packet)
