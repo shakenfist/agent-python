@@ -5,7 +5,7 @@ import distro
 import linux_utils
 import os
 from oslo_concurrency import processutils
-import sys
+import time
 
 from shakenfist_agent import protocol
 
@@ -136,8 +136,11 @@ class SFFileAgent(protocol.FileAgent):
 @click.pass_context
 def daemon_run(ctx):
     if not os.path.exists(SIDE_CHANNEL_PATH):
-        click.echo('Side channel missing')
-        sys.exit(1)
+        click.echo('Side channel missing, will periodically check.')
+
+        while not os.path.exists(SIDE_CHANNEL_PATH):
+            time.sleep(60)
+
     channel = SFFileAgent(SIDE_CHANNEL_PATH, logger=ctx.obj['LOGGER'])
     channel.send_ping()
 
