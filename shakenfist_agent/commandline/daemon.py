@@ -5,6 +5,8 @@ import distro
 import linux_utils
 import os
 from oslo_concurrency import processutils
+from pbr.version import VersionInfo
+import psutil
 import time
 
 from shakenfist_agent import protocol
@@ -25,6 +27,11 @@ class SFFileAgent(protocol.FileAgent):
         self.add_command('is-system-running', self.is_system_running)
         self.add_command('gather-facts', self.gather_facts)
         self.add_command('fetch-file', self.fetch_file)
+        self.send_packet({
+            'command': 'agent-start',
+            'message': 'version %s' % VersionInfo('shakenfist_agent').version_string(),
+            'uptime': time.time() - psutil.boot_time()
+        })
         self.log.debug('Setup complete')
 
     def is_system_running(self, _packet):
@@ -34,7 +41,8 @@ class SFFileAgent(protocol.FileAgent):
         self.send_packet({
             'command': 'is-system-running-response',
             'result': out == 'running',
-            'message': out
+            'message': out,
+            'uptime': time.time() - psutil.boot_time()
         })
 
     def gather_facts(self, _packet):
