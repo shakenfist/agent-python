@@ -30,7 +30,7 @@ class SFFileAgent(protocol.FileAgent):
         self.send_packet({
             'command': 'agent-start',
             'message': 'version %s' % VersionInfo('shakenfist_agent').version_string(),
-            'uptime': time.time() - psutil.boot_time()
+            'system_boot_time': psutil.boot_time()
         })
         self.log.debug('Setup complete')
 
@@ -42,7 +42,7 @@ class SFFileAgent(protocol.FileAgent):
             'command': 'is-system-running-response',
             'result': out == 'running',
             'message': out,
-            'uptime': time.time() - psutil.boot_time()
+            'system_boot_time': psutil.boot_time()
         })
 
     def gather_facts(self, _packet):
