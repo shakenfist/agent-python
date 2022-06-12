@@ -2,7 +2,7 @@ import base64
 import click
 from collections import defaultdict
 import distro
-import linux_utils
+from linux_utils.fstab import find_mounted_filesystems
 import os
 from oslo_concurrency import processutils
 from pbr.version import VersionInfo
@@ -52,7 +52,7 @@ class SFFileAgent(protocol.FileAgent):
             'ssh-host-keys': {}
         }
 
-        for entry in linux_utils.fstab.find_mounted_filesystems():
+        for entry in find_mounted_filesystems():
             facts['mounts'].append({
                 'device': entry.device,
                 'mount_point': entry.mount_point,
