@@ -11,6 +11,10 @@ class UnknownCommand(Exception):
     pass
 
 
+class JSONDecodeFailure(Exception):
+    pass
+
+
 class Agent(object):
     def __init__(self, logger=None):
         self.buffer = b''
@@ -99,21 +103,34 @@ class Agent(object):
         if d:
             self.buffer += d
 
-        offset = self.buffer.decode('utf-8').find(self.PREAMBLE)
+        buffer_as_string = self.buffer.decode('utf-8')
+        offset = buffer_as_string.find(self.PREAMBLE)
         if offset == -1:
             return None
 
+        # Do we have any length characters?
         blen = len(self.buffer)
-        if blen < offset + 12:
+        if blen < offset + 11:
             return None
 
-        plen = int(self.buffer[offset + 9: offset + 11])
-        if blen < offset + 12 + plen:
+        # Find the end of the length field
+        len_end = offset + 9
+        while buffer_as_string[len_end].isnumeric():
+            len_end += 1
+
+        # Find the length of the body of the packet
+        plen = int(buffer_as_string[offset + 9: len_end])
+        if blen < len_end + 1 + plen:
             return None
 
-        packet = self.buffer[offset + 12: offset + 12 + plen]
-        self.buffer = self.buffer[offset + 12 + plen:]
-        return json.loads(packet.decode('utf-8'))
+        # Extract and parse the body of the packet
+        packet = self.buffer[len_end + 1: len_end + 1 + plen]
+        self.buffer = self.buffer[len_end + 1 + plen:]
+        try:
+            return json.loads(packet.decode('utf-8'))
+        except json.JSONDecodeError:
+            raise JSONDecodeFailure('Failed to JSON decode packet: %s'
+                                    % packet.decode('utf-8'))
 
     def dispatch_packet(self, packet):
         if self.log:

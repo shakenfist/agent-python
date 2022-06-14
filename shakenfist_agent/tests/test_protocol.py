@@ -66,3 +66,25 @@ class ProtocolTestCase(testtools.TestCase):
         a.send_ping(unique=4242)
         mock_write.assert_called_with(
             b'*SFv001*[35]{"command": "ping", "unique": 4242}')
+
+    @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
+    def test_null_body(self, mock_read):
+        a = protocol.Agent()
+        p = '%s[4]null' % a.PREAMBLE
+        a.buffer = p.encode('utf-8')
+        self.assertEqual(None, a.find_packet())
+
+    @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
+    def test_small_body(self, mock_read):
+        a = protocol.Agent()
+        p = '%s[1]1' % a.PREAMBLE
+        a.buffer = p.encode('utf-8')
+        self.assertEqual(1, a.find_packet())
+
+    @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
+    def test_large_body(self, mock_read):
+        b = 'm' * 1024
+        a = protocol.Agent()
+        p = '%s[1026]"%s"' % (a.PREAMBLE, b)
+        a.buffer = p.encode('utf-8')
+        self.assertEqual(b, a.find_packet())
