@@ -5,4 +5,4 @@ testtools           # mit
 oslo.concurrency    # apache2
 distro              # apache2
 linux-utils         # mit
-psutil              # bsd
+psutil>5.9.0        # bsd
