@@ -7,6 +7,8 @@ import os
 from oslo_concurrency import processutils
 from pbr.version import VersionInfo
 import psutil
+import signal
+import sys
 import time
 
 from shakenfist_agent import protocol
@@ -33,6 +35,13 @@ class SFFileAgent(protocol.FileAgent):
             'system_boot_time': psutil.boot_time()
         })
         self.log.debug('Setup complete')
+
+    def close(self):
+        self.send_packet({
+            'command': 'agent-stop',
+            'system_boot_time': psutil.boot_time()
+        })
+        super(SFFileAgent, self).close()
 
     def is_system_running(self, _packet):
         out, _ = processutils.execute(
@@ -140,29 +149,44 @@ class SFFileAgent(protocol.FileAgent):
             })
 
 
+CHANNEL = None
+
+
+def exit_gracefully(sig, _frame):
+    if sig == signal.SIGTERM:
+        print('Caught SIGTERM, gracefully exiting')
+        if CHANNEL:
+            CHANNEL.close()
+        sys.exit()
+
+
 @daemon.command(name='run', help='Run the sf-agent daemon')
 @click.pass_context
 def daemon_run(ctx):
+    global CHANNEL
+
+    signal.signal(signal.SIGTERM, exit_gracefully)
+
     if not os.path.exists(SIDE_CHANNEL_PATH):
         click.echo('Side channel missing, will periodically check.')
 
         while not os.path.exists(SIDE_CHANNEL_PATH):
             time.sleep(60)
 
-    channel = SFFileAgent(SIDE_CHANNEL_PATH, logger=ctx.obj['LOGGER'])
-    channel.send_ping()
+    CHANNEL = SFFileAgent(SIDE_CHANNEL_PATH, logger=ctx.obj['LOGGER'])
+    CHANNEL.send_ping()
 
     while True:
         processed = defaultdict(int)
 
-        for packet in channel.find_packets():
+        for packet in CHANNEL.find_packets():
             command = packet.get('command', 'none')
             processed[command] += 1
             # if processed[command] > 1 and command in ['ping', 'is-system-running']:
             #     continue
 
             try:
-                channel.dispatch_packet(packet)
+                CHANNEL.dispatch_packet(packet)
             except protocol.UnknownCommand as e:
                 print(e)
 
