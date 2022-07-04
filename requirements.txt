@@ -1,7 +1,4 @@
 click>=8.0.0        # bsd
-tox                 # mit
-flake8              # mit
-testtools           # mit
 oslo.concurrency    # apache2
 distro              # apache2
 linux-utils         # mit
