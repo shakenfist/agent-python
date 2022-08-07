@@ -1,5 +1,6 @@
-click>=8.0.0        # bsd
-oslo.concurrency    # apache2
-distro              # apache2
-linux-utils         # mit
-psutil>5.9.0        # bsd
+click>=8.0.0         # bsd
+oslo.concurrency     # apache2
+distro               # apache2
+linux-utils          # mit
+psutil>5.9.0         # bsd
+shakenfist-utilities # apache2
