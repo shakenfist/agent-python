@@ -35,7 +35,7 @@ class Agent(object):
             d = os.read(self.input_fileno, 102400)
             self.received_any_data = True
         except BlockingIOError:
-            pass
+            time.sleep(200)
 
         if d:
             self.last_data = time.time()
