@@ -28,7 +28,7 @@ class SFFileAgent(protocol.FileAgent):
 
         self.add_command('is-system-running', self.is_system_running)
         self.add_command('gather-facts', self.gather_facts)
-        self.add_command('fetch-file', self.fetch_file)
+        self.add_command('get-file', self.get_file)
         self.send_packet({
             'command': 'agent-start',
             'message': 'version %s' % VersionInfo('shakenfist_agent').version_string(),
@@ -80,11 +80,11 @@ class SFFileAgent(protocol.FileAgent):
             'result': facts
         })
 
-    def fetch_file(self, packet):
+    def get_file(self, packet):
         path = packet.get('path')
         if not path:
             self.send_packet({
-                'command': 'fetch-file-response',
+                'command': 'get-file-response',
                 'result': False,
                 'message': 'path is not set'
             })
@@ -92,16 +92,16 @@ class SFFileAgent(protocol.FileAgent):
 
         if not os.path.exists(path):
             self.send_packet({
-                'command': 'fetch-file-response',
+                'command': 'get-file-response',
                 'result': False,
                 'path': path,
                 'message': 'path does not exist'
             })
             return
 
-        if not os.is_file(path, follow_symlinks=True):
+        if not os.path.isfile(path, follow_symlinks=True):
             self.send_packet({
-                'command': 'fetch-file-response',
+                'command': 'get-file-response',
                 'result': False,
                 'path': path,
                 'message': 'path is not a file'
@@ -110,7 +110,7 @@ class SFFileAgent(protocol.FileAgent):
 
         st = os.stat(path, follow_symlinks=True)
         self.send_packet({
-            'command': 'fetch-file-response',
+            'command': 'get-file-response',
             'result': True,
             'path': path,
             'stat_result': {
@@ -129,7 +129,7 @@ class SFFileAgent(protocol.FileAgent):
             d = f.read(1024)
             while d:
                 self.send_packet({
-                    'command': 'fetch-file-response',
+                    'command': 'get-file-response',
                     'result': True,
                     'path': path,
                     'offset': offset,
@@ -140,7 +140,7 @@ class SFFileAgent(protocol.FileAgent):
                 d = f.read(1024)
 
             self.send_packet({
-                'command': 'fetch-file-response',
+                'command': 'get-file-response',
                 'result': True,
                 'path': path,
                 'offset': offset,
