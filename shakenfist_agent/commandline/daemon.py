@@ -34,7 +34,9 @@ class SFFileAgent(protocol.FileAgent):
             'message': 'version %s' % VersionInfo('shakenfist_agent').version_string(),
             'system_boot_time': psutil.boot_time()
         })
-        self.log.debug('Setup complete')
+
+        if self.log:
+            self.log.debug('Setup complete')
 
     def close(self):
         self.send_packet({
@@ -61,12 +63,14 @@ class SFFileAgent(protocol.FileAgent):
             'ssh-host-keys': {}
         }
 
-        for entry in find_mounted_filesystems():
-            facts['mounts'].append({
-                'device': entry.device,
-                'mount_point': entry.mount_point,
-                'vfs_type': entry.vfs_type
-            })
+        # We should allow this agent to at least run on MacOS
+        if facts['distribution']['id'] != 'darwin':
+            for entry in find_mounted_filesystems():
+                facts['mounts'].append({
+                    'device': entry.device,
+                    'mount_point': entry.mount_point,
+                    'vfs_type': entry.vfs_type
+                })
 
         for kind, path in [('rsa', '/etc/ssh/ssh_host_rsa_key.pub'),
                            ('ecdsa',  '/etc/ssh/ssh_host_ecdsa_key.pub'),
@@ -99,7 +103,7 @@ class SFFileAgent(protocol.FileAgent):
             })
             return
 
-        if not os.path.isfile(path, follow_symlinks=True):
+        if not os.path.isfile(path):
             self.send_packet({
                 'command': 'get-file-response',
                 'result': False,
@@ -134,7 +138,7 @@ class SFFileAgent(protocol.FileAgent):
                     'path': path,
                     'offset': offset,
                     'encoding': 'base64',
-                    'chunk': base64.b64encode(d).encode('utf-8')
+                    'chunk': base64.b64encode(d)
                 })
                 offset += len(d)
                 d = f.read(1024)
