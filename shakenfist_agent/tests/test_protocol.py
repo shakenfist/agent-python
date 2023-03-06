@@ -88,3 +88,11 @@ class ProtocolTestCase(testtools.TestCase):
         p = '%s[1026]"%s"' % (a.PREAMBLE, b)
         a.buffer = p.encode('utf-8')
         self.assertEqual(b, a.find_packet())
+
+    @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
+    def test_json_decode_fails(self, mock_read):
+        b = '{"notjson"}'
+        a = protocol.Agent()
+        p = '%s[%d]"%s"' % (a.PREAMBLE, len(b), b)
+        a.buffer = p.encode('utf-8')
+        self.assertRaises(protocol.JSONDecodeFailure, a.find_packet)

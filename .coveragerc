@@ -1,0 +1,17 @@
+[run]
+branch = True
+source = shakenfist_agent
+omit = shakenfist_agent/tests/*
+parallel = True
+
+[report]
+omit = shakenfist_agent/tests/*
+
+exclude_lines =
+    # Have to re-enable the standard pragma
+    pragma: no cover
+
+ignore_errors = True
+
+[html]
+directory = cover
