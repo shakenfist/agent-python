@@ -1,12 +1,13 @@
 import base64
 import click
-from collections import defaultdict
+import copy
 import distro
 from linux_utils.fstab import find_mounted_filesystems
 import os
 from oslo_concurrency import processutils
 from pbr.version import VersionInfo
 import psutil
+import select
 import signal
 import sys
 import time
@@ -26,9 +27,13 @@ class SFFileAgent(protocol.FileAgent):
     def __init__(self, path, logger=None):
         super(SFFileAgent, self).__init__(path, logger=logger)
 
+        self.watched_files = []
+
         self.add_command('is-system-running', self.is_system_running)
         self.add_command('gather-facts', self.gather_facts)
         self.add_command('get-file', self.get_file)
+        self.add_command('watch-file', self.watch_file)
+
         self.send_packet({
             'command': 'agent-start',
             'message': 'version %s' % VersionInfo('shakenfist_agent').version_string(),
@@ -84,32 +89,38 @@ class SFFileAgent(protocol.FileAgent):
             'result': facts
         })
 
-    def get_file(self, packet):
-        path = packet.get('path')
+    def _path_is_a_file(self, command, path):
         if not path:
             self.send_packet({
-                'command': 'get-file-response',
+                'command': '%s-response' % command,
                 'result': False,
                 'message': 'path is not set'
             })
-            return
+            return False
 
         if not os.path.exists(path):
             self.send_packet({
-                'command': 'get-file-response',
+                'command': '%s-response' % command,
                 'result': False,
                 'path': path,
                 'message': 'path does not exist'
             })
-            return
+            return False
 
         if not os.path.isfile(path):
             self.send_packet({
-                'command': 'get-file-response',
+                'command': '%s-response' % command,
                 'result': False,
                 'path': path,
                 'message': 'path is not a file'
             })
+            return False
+        
+        return True
+
+    def get_file(self, packet):
+        path = packet.get('path')
+        if not self._path_is_a_file('get-file', path):
             return
 
         st = os.stat(path, follow_symlinks=True)
@@ -152,6 +163,48 @@ class SFFileAgent(protocol.FileAgent):
                 'chunk': None
             })
 
+    def watch_file(self, packet):
+        path = packet.get('path')
+        if not self._path_is_a_file('watch-file', path):
+            return
+        
+        flo = open(path, 'rb')
+        self.set_fd_nonblocking(flo.fileno())
+
+        self.watched_files[flo.fileno()] = {
+            'path': path,
+            'flo': flo
+        }
+
+    def watch_files(self):
+        readable = []
+        for f in self.watched_files:
+            readable.append(f['flo'])
+        readable, _, exceptional = select.select(readable, [], readable, 0)
+
+        for fd in exceptional:
+            if fd in self.watched_files:
+                self.send_packet({
+                    'command': 'watch-file-response',
+                    'result': True,
+                    'path': self.watched_files[fd]['path'],
+                    'chunk': None
+                })
+                del self.watched_files[fd]
+
+        for fd in readable:
+            if fd in self.watched_files:
+                try:
+                    self.send_packet({
+                        'command': 'watch-file-response',
+                        'result': True,
+                        'path': self.watched_files[fd]['path'],
+                        'chunk': base64.base64encode(
+                            self.watched_files[fd]['flo'].read(1024))
+                    })
+                except BlockingIOError:
+                    pass
+
 
 CHANNEL = None
 
@@ -181,12 +234,9 @@ def daemon_run(ctx):
     CHANNEL.send_ping()
 
     while True:
-        processed = defaultdict(int)
-
         for packet in CHANNEL.find_packets():
-            command = packet.get('command', 'none')
-            processed[command] += 1
             CHANNEL.dispatch_packet(packet)
+        CHANNEL.watch_files()
 
 
 daemon.add_command(daemon_run)
