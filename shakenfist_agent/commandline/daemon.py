@@ -1,6 +1,5 @@
 import base64
 import click
-import copy
 import distro
 from linux_utils.fstab import find_mounted_filesystems
 import os
@@ -115,7 +114,7 @@ class SFFileAgent(protocol.FileAgent):
                 'message': 'path is not a file'
             })
             return False
-        
+
         return True
 
     def get_file(self, packet):
@@ -149,7 +148,7 @@ class SFFileAgent(protocol.FileAgent):
                     'path': path,
                     'offset': offset,
                     'encoding': 'base64',
-                    'chunk': base64.b64encode(d)
+                    'chunk': base64.b64encode(d).decode('utf-8')
                 })
                 offset += len(d)
                 d = f.read(1024)
@@ -167,7 +166,7 @@ class SFFileAgent(protocol.FileAgent):
         path = packet.get('path')
         if not self._path_is_a_file('watch-file', path):
             return
-        
+
         flo = open(path, 'rb')
         self.set_fd_nonblocking(flo.fileno())
 
@@ -200,7 +199,7 @@ class SFFileAgent(protocol.FileAgent):
                         'result': True,
                         'path': self.watched_files[fd]['path'],
                         'chunk': base64.base64encode(
-                            self.watched_files[fd]['flo'].read(1024))
+                            self.watched_files[fd]['flo'].read(1024)).decode('utf-8')
                     })
                 except BlockingIOError:
                     pass
