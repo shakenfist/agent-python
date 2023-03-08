@@ -7,14 +7,6 @@ import sys
 import time
 
 
-class UnknownCommand(Exception):
-    pass
-
-
-class JSONDecodeFailure(Exception):
-    pass
-
-
 class Agent(object):
     def __init__(self, logger=None):
         self.buffer = b''
@@ -23,7 +15,10 @@ class Agent(object):
 
         self._command_map = {
             'ping': self.send_pong,
-            'pong': self.noop
+            'pong': self.noop,
+            'json-decode-failure': self.log_error_packet,
+            'command-error': self.log_error_packet,
+            'unknown-command': self.log_error_packet,
         }
 
         self.log = logger
@@ -129,23 +124,44 @@ class Agent(object):
         try:
             return json.loads(packet.decode('utf-8'))
         except json.JSONDecodeError:
-            raise JSONDecodeFailure('Failed to JSON decode packet: %s'
-                                    % packet.decode('utf-8'))
+            self.send_packet(
+                {
+                    'command': 'json-decode-failure',
+                    'message': ('failed to JSON decode packet: %s'
+                                % packet.decode('utf-8'))
+                })
 
     def dispatch_packet(self, packet):
         if self.log:
             self.log.debug('Processing: %s' % packet)
         command = packet.get('command')
+
         if command in self._command_map:
-            self._command_map[command](packet)
+            try:
+                self._command_map[command](packet)
+            except Exception as e:
+                self.send_packet(
+                    {
+                        'command': 'command-error',
+                        'message': 'command %s raised an error: %s' % (command, e)
+                    })
         else:
             if self.log:
                 self.log.debug('Could not find command "%s" in %s'
                                % (command, self._command_map.keys()))
-            raise UnknownCommand('Command %s is unknown' % command)
+            self.send_packet(
+                {
+                    'command': 'unknown-command',
+                    'message': '%s is an unknown command' % command
+                })
 
     def noop(self, packet):
         return
+
+    def log_error_packet(self, packet):
+        if self.log:
+            self.log.with_fields(packet).error(
+                'Received a packet indicating an error')
 
     def send_ping(self, unique=None):
         if not unique:

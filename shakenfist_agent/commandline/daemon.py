@@ -186,13 +186,7 @@ def daemon_run(ctx):
         for packet in CHANNEL.find_packets():
             command = packet.get('command', 'none')
             processed[command] += 1
-            # if processed[command] > 1 and command in ['ping', 'is-system-running']:
-            #     continue
-
-            try:
-                CHANNEL.dispatch_packet(packet)
-            except protocol.UnknownCommand as e:
-                print(e)
+            CHANNEL.dispatch_packet(packet)
 
 
 daemon.add_command(daemon_run)
