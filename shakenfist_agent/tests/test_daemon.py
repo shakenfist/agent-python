@@ -1,3 +1,4 @@
+import json
 import mock
 import string
 import tempfile
@@ -95,6 +96,9 @@ class DaemonAgentTestCase(testtools.TestCase):
                     self.assertTrue('offset' in out_packet_3)
                     self.assertEqual('base64', out_packet_3['encoding'])
                     self.assertTrue(out_packet_3['chunk'] is not None)
+
+                    # Ensure the packet is JSON serializable
+                    json.dumps(out_packet_3)
 
                 out_packet_4 = mock_send_packet.mock_calls[64].args[0]
                 self.assertEqual('get-file-response', out_packet_4['command'])
