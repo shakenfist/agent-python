@@ -26,7 +26,7 @@ class SFFileAgent(protocol.FileAgent):
     def __init__(self, path, logger=None):
         super(SFFileAgent, self).__init__(path, logger=logger)
 
-        self.watched_files = []
+        self.watched_files = {}
 
         self.add_command('is-system-running', self.is_system_running)
         self.add_command('gather-facts', self.gather_facts)
