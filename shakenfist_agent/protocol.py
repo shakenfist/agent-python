@@ -1,3 +1,4 @@
+import copy
 import fcntl
 import json
 import os
@@ -133,7 +134,10 @@ class Agent(object):
 
     def dispatch_packet(self, packet):
         if self.log:
-            self.log.debug('Processing: %s' % packet)
+            lp = copy.copy(packet)
+            if 'chunk' in lp:
+                lp['chunk'] = '...'
+            self.log.debug('Processing: %s' % lp)
         command = packet.get('command')
 
         if command in self._command_map:
