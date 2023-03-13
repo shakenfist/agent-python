@@ -2,6 +2,7 @@ import base64
 import click
 import distro
 from linux_utils.fstab import find_mounted_filesystems
+import multiprocessing
 import os
 from oslo_concurrency import processutils
 from pbr.version import VersionInfo
@@ -27,11 +28,13 @@ class SFFileAgent(protocol.FileAgent):
         super(SFFileAgent, self).__init__(path, logger=logger)
 
         self.watched_files = {}
+        self.executing_commands = []
 
         self.add_command('is-system-running', self.is_system_running)
         self.add_command('gather-facts', self.gather_facts)
         self.add_command('get-file', self.get_file)
         self.add_command('watch-file', self.watch_file)
+        self.add_command('execute', self.execute)
 
         self.send_packet({
             'command': 'agent-start',
@@ -88,79 +91,8 @@ class SFFileAgent(protocol.FileAgent):
             'result': facts
         })
 
-    def _path_is_a_file(self, command, path):
-        if not path:
-            self.send_packet({
-                'command': '%s-response' % command,
-                'result': False,
-                'message': 'path is not set'
-            })
-            return False
-
-        if not os.path.exists(path):
-            self.send_packet({
-                'command': '%s-response' % command,
-                'result': False,
-                'path': path,
-                'message': 'path does not exist'
-            })
-            return False
-
-        if not os.path.isfile(path):
-            self.send_packet({
-                'command': '%s-response' % command,
-                'result': False,
-                'path': path,
-                'message': 'path is not a file'
-            })
-            return False
-
-        return True
-
     def get_file(self, packet):
-        path = packet.get('path')
-        if not self._path_is_a_file('get-file', path):
-            return
-
-        st = os.stat(path, follow_symlinks=True)
-        self.send_packet({
-            'command': 'get-file-response',
-            'result': True,
-            'path': path,
-            'stat_result': {
-                'mode': st.st_mode,
-                'size': st.st_size,
-                'uid': st.st_uid,
-                'gid': st.st_gid,
-                'atime': st.st_atime,
-                'mtime': st.st_mtime,
-                'ctime': st.st_ctime
-            }
-        })
-
-        offset = 0
-        with open(path, 'rb') as f:
-            d = f.read(1024)
-            while d:
-                self.send_packet({
-                    'command': 'get-file-response',
-                    'result': True,
-                    'path': path,
-                    'offset': offset,
-                    'encoding': 'base64',
-                    'chunk': base64.b64encode(d).decode('utf-8')
-                })
-                offset += len(d)
-                d = f.read(1024)
-
-            self.send_packet({
-                'command': 'get-file-response',
-                'result': True,
-                'path': path,
-                'offset': offset,
-                'encoding': 'base64',
-                'chunk': None
-            })
+        self._send_file('get-file', packet.get('path'))
 
     def watch_file(self, packet):
         path = packet.get('path')
@@ -204,6 +136,60 @@ class SFFileAgent(protocol.FileAgent):
                 except BlockingIOError:
                     pass
 
+    def execute(self, packet):
+        if 'command-line' not in packet:
+            self.send_packet({
+                'command': 'execute-response',
+                'result': False,
+                'message': 'command-line is not set'
+            })
+            return
+
+        if packet.get('block-for-result', True):
+            try:
+                out, err = processutils.execute(
+                    packet['command-line'], shell=True, check_exit_code=True)
+                self.send_packet({
+                    'command': 'execute-response',
+                    'command-line': packet['command-line'],
+                    'result': True,
+                    'stdout': out,
+                    'stderr': err,
+                    'return-code': 0
+                })
+                return
+
+            except processutils.ProcessExecutionError as e:
+                self.send_packet({
+                    'command': 'execute-response',
+                    'command-line': packet['command-line'],
+                    'result': False,
+                    'stdout': e.stdout,
+                    'stderr': e.stderr,
+                    'return-code': e.exit_code
+                })
+                return
+
+        def _execute(cmd):
+            processutils.execute(cmd, shell=True, check_exit_code=False)
+
+        p = multiprocessing.Process(
+            target=_execute, args=(packet['command-line'],))
+        p.start()
+        self.executing_commands.append(p)
+
+        self.send_packet({
+            'command': 'execute-response',
+            'command-line': packet['command-line'],
+            'pid': p.pid
+        })
+
+    def reap_processes(self):
+        for p in self.executing_commands:
+            if not p.is_alive():
+                p.join(1)
+            self.executing_commands.remove(p)
+
 
 CHANNEL = None
 
@@ -236,6 +222,7 @@ def daemon_run(ctx):
         for packet in CHANNEL.find_packets():
             CHANNEL.dispatch_packet(packet)
         CHANNEL.watch_files()
+        CHANNEL.reap_processes()
 
 
 daemon.add_command(daemon_run)

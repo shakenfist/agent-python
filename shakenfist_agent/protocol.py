@@ -1,3 +1,4 @@
+import base64
 import copy
 import fcntl
 import json
@@ -181,6 +182,80 @@ class Agent(object):
             'command': 'pong',
             'unique': packet['unique']
         })
+
+    def _path_is_a_file(self, command, path, send_error_packets=True):
+        if not path:
+            self.send_packet({
+                'command': '%s-response' % command,
+                'result': False,
+                'message': 'path is not set'
+            })
+            return 'path is not set'
+
+        if not os.path.exists(path):
+            self.send_packet({
+                'command': '%s-response' % command,
+                'result': False,
+                'path': path,
+                'message': 'path does not exist'
+            })
+            return 'path does not exist'
+
+        if not os.path.isfile(path):
+            self.send_packet({
+                'command': '%s-response' % command,
+                'result': False,
+                'path': path,
+                'message': 'path is not a file'
+            })
+            return 'path is not a file'
+
+        return None
+
+    def _send_file(self, command, path):
+        error = self._path_is_a_file(command, path)
+        if error:
+            return
+
+        st = os.stat(path, follow_symlinks=True)
+        self.send_packet({
+            'command': '%s-response' % command,
+            'result': True,
+            'path': path,
+            'stat_result': {
+                'mode': st.st_mode,
+                'size': st.st_size,
+                'uid': st.st_uid,
+                'gid': st.st_gid,
+                'atime': st.st_atime,
+                'mtime': st.st_mtime,
+                'ctime': st.st_ctime
+            }
+        })
+
+        offset = 0
+        with open(path, 'rb') as f:
+            d = f.read(1024)
+            while d:
+                self.send_packet({
+                    'command': '%s-response' % command,
+                    'result': True,
+                    'path': path,
+                    'offset': offset,
+                    'encoding': 'base64',
+                    'chunk': base64.b64encode(d).decode('utf-8')
+                })
+                offset += len(d)
+                d = f.read(1024)
+
+            self.send_packet({
+                'command': '%s-response' % command,
+                'result': True,
+                'path': path,
+                'offset': offset,
+                'encoding': 'base64',
+                'chunk': None
+            })
 
 
 class SocketAgent(Agent):
