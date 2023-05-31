@@ -10,6 +10,7 @@ import psutil
 import select
 import shutil
 import signal
+import symbolicmode
 import sys
 import time
 
@@ -118,7 +119,8 @@ class SFFileAgent(protocol.FileAgent):
         self.incomplete_file_gets[path]['flo'].write(d)
 
     def chmod(self, packet):
-        os.chmod(packet['path'], packet['mode'])
+        os.chmod(packet['path'],
+                 symbolicmode.symbolic_to_numeric_permissions(packet['mode']))
         self.send_packet({
             'command': 'chmod-response',
             'path': packet['path']
