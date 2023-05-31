@@ -8,6 +8,7 @@ from oslo_concurrency import processutils
 from pbr.version import VersionInfo
 import psutil
 import select
+import shutil
 import signal
 import sys
 import time
@@ -33,6 +34,8 @@ class SFFileAgent(protocol.FileAgent):
         self.add_command('is-system-running', self.is_system_running)
         self.add_command('gather-facts', self.gather_facts)
         self.add_command('put-file-response', self.put_file_response)
+        self.add_command('chmod', self.chmod)
+        self.add_command('chown', self.chown)
         self.add_command('get-file', self.get_file)
         self.add_command('watch-file', self.watch_file)
         self.add_command('execute', self.execute)
@@ -113,6 +116,20 @@ class SFFileAgent(protocol.FileAgent):
 
         d = base64.b64decode(packet['chunk'])
         self.incomplete_file_gets[path]['flo'].write(d)
+
+    def chmod(self, packet):
+        os.chmod(packet['path'], packet['mode'])
+        self.send_packet({
+            'command': 'chmod-response',
+            'path': packet['path']
+        })
+
+    def chown(self, packet):
+        shutil.chown(packet['path'], user=packet.get('user'), group=packet.get('group'))
+        self.send_packet({
+            'command': 'chown-response',
+            'path': packet['path']
+        })
 
     def get_file(self, packet):
         self._send_file('get-file', packet.get('path'))
