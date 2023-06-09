@@ -102,7 +102,7 @@ class SFFileAgent(protocol.FileAgent):
         path = packet['path']
         if path not in self.incomplete_file_puts:
             self.incomplete_file_puts[path] = {}
-            self.imcomplete_file_puts[path]['flo'] = open(path, 'wb')
+            self.incomplete_file_puts[path]['flo'] = open(path, 'wb')
 
         if 'chunk' not in packet:
             # A metadata packet
@@ -127,14 +127,18 @@ class SFFileAgent(protocol.FileAgent):
         })
 
     def chown(self, packet):
-        shutil.chown(packet['path'], user=packet.get('user'), group=packet.get('group'))
+        shutil.chown(packet.get('path'), user=packet.get('user'), group=packet.get('group'))
         self.send_packet({
             'command': 'chown-response',
             'path': packet['path']
         })
 
     def get_file(self, packet):
-        self._send_file('get-file', packet.get('path'))
+        path = packet.get('path')
+        error = self._path_is_a_file('get-file', path)
+        if error:
+            return
+        self._send_file('get-file', path, path)
 
     def watch_file(self, packet):
         path = packet.get('path')

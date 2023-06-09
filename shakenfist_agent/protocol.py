@@ -183,7 +183,7 @@ class Agent(object):
             'unique': packet['unique']
         })
 
-    def _path_is_a_file(self, command, path, send_error_packets=True):
+    def _path_is_a_file(self, command, path):
         if not path:
             self.send_packet({
                 'command': '%s-response' % command,
@@ -212,16 +212,12 @@ class Agent(object):
 
         return None
 
-    def _send_file(self, command, path):
-        error = self._path_is_a_file(command, path)
-        if error:
-            return
-
-        st = os.stat(path, follow_symlinks=True)
+    def _send_file(self, command, source_path, destination_path):
+        st = os.stat(source_path, follow_symlinks=True)
         self.send_packet({
             'command': '%s-response' % command,
             'result': True,
-            'path': path,
+            'path': destination_path,
             'stat_result': {
                 'mode': st.st_mode,
                 'size': st.st_size,
@@ -234,13 +230,13 @@ class Agent(object):
         })
 
         offset = 0
-        with open(path, 'rb') as f:
+        with open(source_path, 'rb') as f:
             d = f.read(1024)
             while d:
                 self.send_packet({
                     'command': '%s-response' % command,
                     'result': True,
-                    'path': path,
+                    'path': destination_path,
                     'offset': offset,
                     'encoding': 'base64',
                     'chunk': base64.b64encode(d).decode('utf-8')
@@ -251,7 +247,7 @@ class Agent(object):
             self.send_packet({
                 'command': '%s-response' % command,
                 'result': True,
-                'path': path,
+                'path': destination_path,
                 'offset': offset,
                 'encoding': 'base64',
                 'chunk': None
