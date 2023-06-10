@@ -165,8 +165,7 @@ class Agent(object):
 
     def log_error_packet(self, packet):
         if self.log:
-            self.log.with_fields(packet).error(
-                'Received a packet indicating an error')
+            self.log.with_fields(packet).error('Received a packet indicating an error')
 
     def send_ping(self, unique=None):
         if not unique:

@@ -110,13 +110,13 @@ class SFFileAgent(protocol.FileAgent):
             return
 
         if packet['chunk'] is None:
-            self.incomplete_file_gets[path]['flo'].close()
-            del self.incomplete_file_gets[path]
+            self.incomplete_file_puts[path]['flo'].close()
+            del self.incomplete_file_puts[path]
             self.log.with_fields(packet).info('File put complete')
             return
 
         d = base64.b64decode(packet['chunk'])
-        self.incomplete_file_gets[path]['flo'].write(d)
+        self.incomplete_file_puts[path]['flo'].write(d)
 
     def chmod(self, packet):
         os.chmod(packet['path'],
