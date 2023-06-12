@@ -44,7 +44,8 @@ class SFFileAgent(protocol.FileAgent):
         self.send_packet({
             'command': 'agent-start',
             'message': 'version %s' % VersionInfo('shakenfist_agent').version_string(),
-            'system_boot_time': psutil.boot_time()
+            'system_boot_time': psutil.boot_time(),
+            'unique': str(time.time())
         })
 
         if self.log:
@@ -55,11 +56,12 @@ class SFFileAgent(protocol.FileAgent):
     def close(self):
         self.send_packet({
             'command': 'agent-stop',
-            'system_boot_time': psutil.boot_time()
+            'system_boot_time': psutil.boot_time(),
+            'unique': str(time.time())
         })
         super(SFFileAgent, self).close()
 
-    def is_system_running(self, _packet):
+    def is_system_running(self, packet):
         out, _ = processutils.execute(
             'systemctl is-system-running', shell=True, check_exit_code=False)
         out = out.rstrip()
@@ -67,10 +69,11 @@ class SFFileAgent(protocol.FileAgent):
             'command': 'is-system-running-response',
             'result': out == 'running',
             'message': out,
-            'system_boot_time': psutil.boot_time()
+            'system_boot_time': psutil.boot_time(),
+            'unique': packet.get('unique', str(time.time()))
         })
 
-    def gather_facts(self, _packet):
+    def gather_facts(self, packet):
         facts = {
             'distribution': distro.info(),
             'mounts': [],
@@ -95,7 +98,8 @@ class SFFileAgent(protocol.FileAgent):
 
         self.send_packet({
             'command': 'gather-facts-response',
-            'result': facts
+            'result': facts,
+            'unique': packet.get('unique', str(time.time()))
         })
 
     def put_file_response(self, packet):
@@ -123,26 +127,30 @@ class SFFileAgent(protocol.FileAgent):
                  symbolicmode.symbolic_to_numeric_permissions(packet['mode']))
         self.send_packet({
             'command': 'chmod-response',
-            'path': packet['path']
+            'path': packet['path'],
+            'unique': packet.get('unique', str(time.time()))
         })
 
     def chown(self, packet):
         shutil.chown(packet.get('path'), user=packet.get('user'), group=packet.get('group'))
         self.send_packet({
             'command': 'chown-response',
-            'path': packet['path']
+            'path': packet['path'],
+            'unique': packet.get('unique', str(time.time()))
         })
 
     def get_file(self, packet):
+        unique = packet.get('unique', str(time.time()))
         path = packet.get('path')
-        error = self._path_is_a_file('get-file', path)
+        error = self._path_is_a_file('get-file', path, unique)
         if error:
             return
-        self._send_file('get-file', path, path)
+        self._send_file('get-file', path, path, unique)
 
     def watch_file(self, packet):
+        unique = packet.get('unique', str(time.time()))
         path = packet.get('path')
-        if not self._path_is_a_file('watch-file', path):
+        if not self._path_is_a_file('watch-file', path, unique):
             return
 
         flo = open(path, 'rb')
@@ -183,11 +191,13 @@ class SFFileAgent(protocol.FileAgent):
                     pass
 
     def execute(self, packet):
+        unique = packet.get('unique', str(time.time()))
         if 'command-line' not in packet:
             self.send_packet({
                 'command': 'execute-response',
                 'result': False,
-                'message': 'command-line is not set'
+                'message': 'command-line is not set',
+                'unique': unique
             })
             return
 
@@ -201,7 +211,8 @@ class SFFileAgent(protocol.FileAgent):
                     'result': True,
                     'stdout': out,
                     'stderr': err,
-                    'return-code': 0
+                    'return-code': 0,
+                    'unique': unique
                 })
                 return
 
@@ -212,7 +223,8 @@ class SFFileAgent(protocol.FileAgent):
                     'result': False,
                     'stdout': e.stdout,
                     'stderr': e.stderr,
-                    'return-code': e.exit_code
+                    'return-code': e.exit_code,
+                    'unique': unique
                 })
                 return
 
@@ -227,7 +239,8 @@ class SFFileAgent(protocol.FileAgent):
         self.send_packet({
             'command': 'execute-response',
             'command-line': packet['command-line'],
-            'pid': p.pid
+            'pid': p.pid,
+            'unique': unique
         })
 
     def reap_processes(self):

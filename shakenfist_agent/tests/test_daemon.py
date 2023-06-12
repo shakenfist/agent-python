@@ -9,12 +9,13 @@ from shakenfist_agent.commandline import daemon
 
 
 class DaemonAgentTestCase(testtools.TestCase):
+    @mock.patch('time.time', return_value=1686526181.0196502)
     @mock.patch('psutil.boot_time', return_value=1200)
     @mock.patch('oslo_concurrency.processutils.execute',
                 return_value=('running\n', ''))
     @mock.patch('shakenfist_agent.protocol.Agent.send_packet')
     def test_is_system_running(self, mock_send_packet, mock_execute,
-                               mock_boot_time):
+                               mock_boot_time, mock_time):
         with tempfile.NamedTemporaryFile() as tf:
             a = daemon.SFFileAgent(tf.name)
             a.dispatch_packet({'command': 'is-system-running'})
@@ -27,7 +28,8 @@ class DaemonAgentTestCase(testtools.TestCase):
                 {
                     'command': 'agent-start',
                     'message': 'XXX',
-                    'system_boot_time': 1200
+                    'system_boot_time': 1200,
+                    'unique': '1686526181.0196502'
                 }, out_packet_1)
 
             out_packet_2 = mock_send_packet.mock_calls[1].args[0]
@@ -36,9 +38,10 @@ class DaemonAgentTestCase(testtools.TestCase):
             self.assertEqual('running', out_packet_2['message'])
             self.assertEqual(1200, out_packet_2['system_boot_time'])
 
+    @mock.patch('time.time', return_value=1686526181.0196502)
     @mock.patch('psutil.boot_time', return_value=1200)
     @mock.patch('shakenfist_agent.protocol.Agent.send_packet')
-    def test_gather_facts(self, mock_send_packet, mock_boot_time):
+    def test_gather_facts(self, mock_send_packet, mock_boot_time, mock_time):
         with tempfile.NamedTemporaryFile() as tf:
             a = daemon.SFFileAgent(tf.name)
             a.dispatch_packet({'command': 'gather-facts'})
@@ -51,16 +54,18 @@ class DaemonAgentTestCase(testtools.TestCase):
                 {
                     'command': 'agent-start',
                     'message': 'XXX',
-                    'system_boot_time': 1200
+                    'system_boot_time': 1200,
+                    'unique': '1686526181.0196502'
                 }, out_packet_1)
 
             out_packet_2 = mock_send_packet.mock_calls[1].args[0]
             self.assertEqual('gather-facts-response', out_packet_2['command'])
             self.assertTrue('distribution' in out_packet_2['result'])
 
+    @mock.patch('time.time', return_value=1686526181.0196502)
     @mock.patch('psutil.boot_time', return_value=1200)
     @mock.patch('shakenfist_agent.protocol.Agent.send_packet')
-    def test_get_file(self, mock_send_packet, mock_boot_time):
+    def test_get_file(self, mock_send_packet, mock_boot_time, mock_time):
         with tempfile.NamedTemporaryFile() as tf:
             with tempfile.NamedTemporaryFile() as tf2:
                 with open(tf2.name, 'w') as f:
@@ -78,7 +83,8 @@ class DaemonAgentTestCase(testtools.TestCase):
                     {
                         'command': 'agent-start',
                         'message': 'XXX',
-                        'system_boot_time': 1200
+                        'system_boot_time': 1200,
+                        'unique': '1686526181.0196502'
                     }, out_packet_1)
 
                 out_packet_2 = mock_send_packet.mock_calls[1].args[0]

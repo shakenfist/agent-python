@@ -182,12 +182,13 @@ class Agent(object):
             'unique': packet['unique']
         })
 
-    def _path_is_a_file(self, command, path):
+    def _path_is_a_file(self, command, path, unique):
         if not path:
             self.send_packet({
                 'command': '%s-response' % command,
                 'result': False,
-                'message': 'path is not set'
+                'message': 'path is not set',
+                'unique': unique
             })
             return 'path is not set'
 
@@ -196,7 +197,8 @@ class Agent(object):
                 'command': '%s-response' % command,
                 'result': False,
                 'path': path,
-                'message': 'path does not exist'
+                'message': 'path does not exist',
+                'unique': unique
             })
             return 'path does not exist'
 
@@ -205,13 +207,14 @@ class Agent(object):
                 'command': '%s-response' % command,
                 'result': False,
                 'path': path,
-                'message': 'path is not a file'
+                'message': 'path is not a file',
+                'unique': unique
             })
             return 'path is not a file'
 
         return None
 
-    def _send_file(self, command, source_path, destination_path):
+    def _send_file(self, command, source_path, destination_path, unique):
         st = os.stat(source_path, follow_symlinks=True)
         self.send_packet({
             'command': '%s-response' % command,
@@ -225,7 +228,8 @@ class Agent(object):
                 'atime': st.st_atime,
                 'mtime': st.st_mtime,
                 'ctime': st.st_ctime
-            }
+            },
+            'unique': unique
         })
 
         offset = 0
@@ -238,7 +242,8 @@ class Agent(object):
                     'path': destination_path,
                     'offset': offset,
                     'encoding': 'base64',
-                    'chunk': base64.b64encode(d).decode('utf-8')
+                    'chunk': base64.b64encode(d).decode('utf-8'),
+                    'unique': unique
                 })
                 offset += len(d)
                 d = f.read(1024)
@@ -249,7 +254,8 @@ class Agent(object):
                 'path': destination_path,
                 'offset': offset,
                 'encoding': 'base64',
-                'chunk': None
+                'chunk': None,
+                'unique': unique
             })
 
 
