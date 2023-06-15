@@ -217,7 +217,7 @@ class Agent(object):
     def _send_file(self, command, source_path, destination_path, unique):
         st = os.stat(source_path, follow_symlinks=True)
         self.send_packet({
-            'command': '%s-response' % command,
+            'command': command,
             'result': True,
             'path': destination_path,
             'stat_result': {
@@ -237,7 +237,7 @@ class Agent(object):
             d = f.read(1024)
             while d:
                 self.send_packet({
-                    'command': '%s-response' % command,
+                    'command': command,
                     'result': True,
                     'path': destination_path,
                     'offset': offset,
@@ -249,7 +249,7 @@ class Agent(object):
                 d = f.read(1024)
 
             self.send_packet({
-                'command': '%s-response' % command,
+                'command': command,
                 'result': True,
                 'path': destination_path,
                 'offset': offset,

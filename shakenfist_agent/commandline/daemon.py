@@ -34,7 +34,7 @@ class SFFileAgent(protocol.FileAgent):
 
         self.add_command('is-system-running', self.is_system_running)
         self.add_command('gather-facts', self.gather_facts)
-        self.add_command('put-file-response', self.put_file_response)
+        self.add_command('put-file', self.put_file)
         self.add_command('chmod', self.chmod)
         self.add_command('chown', self.chown)
         self.add_command('get-file', self.get_file)
@@ -102,14 +102,13 @@ class SFFileAgent(protocol.FileAgent):
             'unique': packet.get('unique', str(time.time()))
         })
 
-    def put_file_response(self, packet):
+    def put_file(self, packet):
         path = packet['path']
         if path not in self.incomplete_file_puts:
             self.incomplete_file_puts[path] = {}
             self.incomplete_file_puts[path]['flo'] = open(path, 'wb')
 
-        if 'chunk' not in packet:
-            # A metadata packet
+        if 'stat_result' in packet:
             self.incomplete_file_puts[path].update(packet['stat_result'])
             return
 
@@ -117,6 +116,11 @@ class SFFileAgent(protocol.FileAgent):
             self.incomplete_file_puts[path]['flo'].close()
             del self.incomplete_file_puts[path]
             self.log.with_fields(packet).info('File put complete')
+            self.send_packet({
+                'command': 'put-file-response',
+                'path': packet['path'],
+                'unique': packet['unique']
+            })
             return
 
         d = base64.b64decode(packet['chunk'])
@@ -145,7 +149,7 @@ class SFFileAgent(protocol.FileAgent):
         error = self._path_is_a_file('get-file', path, unique)
         if error:
             return
-        self._send_file('get-file', path, path, unique)
+        self._send_file('get-file-response', path, path, unique)
 
     def watch_file(self, packet):
         unique = packet.get('unique', str(time.time()))
