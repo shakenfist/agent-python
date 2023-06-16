@@ -9,6 +9,9 @@ import sys
 import time
 
 
+MAX_WRITE = 1024
+
+
 class Agent(object):
     def __init__(self, logger=None):
         self.buffer = b''
@@ -29,7 +32,7 @@ class Agent(object):
     def _read(self):
         d = None
         try:
-            d = os.read(self.input_fileno, 102400)
+            d = os.read(self.input_fileno, MAX_WRITE * 2)
             self.received_any_data = True
         except BlockingIOError:
             time.sleep(0.200)
@@ -42,7 +45,9 @@ class Agent(object):
 
     def _write(self, data):
         try:
-            os.write(self.output_fileno, data)
+            while data:
+                os.write(self.output_fileno, data[:MAX_WRITE])
+                data = data[MAX_WRITE:]
         except BlockingIOError:
             if self.log:
                 self.log.info(
