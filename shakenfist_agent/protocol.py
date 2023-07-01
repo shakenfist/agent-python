@@ -9,7 +9,7 @@ import sys
 import time
 
 
-MAX_WRITE = 1024
+MAX_WRITE = 2048
 
 
 class Agent(object):
@@ -127,10 +127,14 @@ class Agent(object):
 
         # Extract and parse the body of the packet
         packet = self.buffer[len_end + 1: len_end + 1 + plen]
+        packet_as_string = packet.decode('utf-8')
         self.buffer = self.buffer[len_end + 1 + plen:]
         try:
-            return json.loads(packet.decode('utf-8'))
+            return json.loads(packet_as_string)
         except json.JSONDecodeError:
+            if self.log:
+                self.log.with_fields({'packet': packet_as_string}).error(
+                    'Failed to JSON decode packet')
             self.send_packet(
                 {
                     'command': 'json-decode-failure',
@@ -150,6 +154,9 @@ class Agent(object):
             try:
                 self._command_map[command](packet)
             except Exception as e:
+                if self.log:
+                    self.log.with_fields({'error': str(e)}).error(
+                        'Command %s raised an error')
                 self.send_packet(
                     {
                         'command': 'command-error',
@@ -157,7 +164,7 @@ class Agent(object):
                     })
         else:
             if self.log:
-                self.log.debug('Could not find command "%s" in %s'
+                self.log.error('Could not find command "%s" in %s'
                                % (command, self._command_map.keys()))
             self.send_packet(
                 {
