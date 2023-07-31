@@ -56,7 +56,7 @@ class ProtocolTestCase(testtools.TestCase):
     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
     def test_incomplete_packet_body(self, mock_read):
         a = protocol.Agent()
-        p = '%s[42]sdfhfg' % a.PREAMBLE
+        p = '%s[00000042]sdfhfg' % a.PREAMBLE
         a.buffer = p.encode('utf-8')
         self.assertEqual(None, a.find_packet())
 
@@ -65,19 +65,19 @@ class ProtocolTestCase(testtools.TestCase):
         a = protocol.Agent()
         a.send_ping(unique=4242)
         mock_write.assert_called_with(
-            b'*SFv001*[35]{"command": "ping", "unique": 4242}')
+            b'*SFv001*[00000035]{"command": "ping", "unique": 4242}')
 
     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
     def test_null_body(self, mock_read):
         a = protocol.Agent()
-        p = '%s[4]null' % a.PREAMBLE
+        p = '%s[00000004]null' % a.PREAMBLE
         a.buffer = p.encode('utf-8')
         self.assertEqual(None, a.find_packet())
 
     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
     def test_small_body(self, mock_read):
         a = protocol.Agent()
-        p = '%s[1]1' % a.PREAMBLE
+        p = '%s[00000001]1' % a.PREAMBLE
         a.buffer = p.encode('utf-8')
         self.assertEqual(1, a.find_packet())
 
@@ -85,7 +85,7 @@ class ProtocolTestCase(testtools.TestCase):
     def test_large_body(self, mock_read):
         b = 'm' * 1024
         a = protocol.Agent()
-        p = '%s[1026]"%s"' % (a.PREAMBLE, b)
+        p = '%s[00001026]"%s"' % (a.PREAMBLE, b)
         a.buffer = p.encode('utf-8')
         self.assertEqual(b, a.find_packet())
 
