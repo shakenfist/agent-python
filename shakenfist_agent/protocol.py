@@ -12,6 +12,10 @@ import time
 MAX_WRITE = 2048
 
 
+class PacketTooLarge(Exception):
+    ...
+
+
 class Agent(object):
     def __init__(self, logger=None):
         self.buffer = b''
@@ -83,13 +87,20 @@ class Agent(object):
         os.close(self.output_fileno)
 
     # Our packet format is: *SFv001*XXXX*YYYY
-    # Where XXXX is a four character decimal length with zero padding (i.e. 0100)
+    # Where XXXX is a eight character decimal length with zero padding (i.e. 00000100)
     # and YYYY is XXXX bytes of UTF-8 encoded JSON
     PREAMBLE = '*SFv001*'
 
     def send_packet(self, p):
         j = json.dumps(p)
-        packet = '%s[%d]%s' % (self.PREAMBLE, len(j), j)
+        j_len = len(j)
+
+        if j_len > 99999999:
+            raise PacketTooLarge(
+                'The maximum packet size is 99,999,999 bytes of UTF-8 encoded JSON. '
+                'This packet is %d bytes.' % j_len)
+
+        packet = '%s[%08d]%s' % (self.PREAMBLE, j_len, j)
         self._write(packet.encode('utf-8'))
         if self.log:
             self.log.debug('Sent: %s' % packet)
@@ -112,7 +123,7 @@ class Agent(object):
 
         # Do we have any length characters?
         blen = len(self.buffer)
-        if blen < offset + 11:
+        if blen < offset + 15:
             return None
 
         # Find the end of the length field
