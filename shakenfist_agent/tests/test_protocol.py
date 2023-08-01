@@ -26,7 +26,7 @@ class ProtocolTestCase(testtools.TestCase):
 
         for packet in packets:
             j = json.dumps(packet)
-            d = '%s[%d]%s' % (a.PREAMBLE, len(j), j)
+            d = '%s[%08d]%s' % (a.PREAMBLE, len(j), j)
             a.buffer += d.encode('utf-8')
         a.buffer += '*SFv0'.encode('utf-8')
 
@@ -94,7 +94,7 @@ class ProtocolTestCase(testtools.TestCase):
     def test_json_decode_fails(self, mock_read, mock_send_packet):
         b = '{"notjson"}'
         a = protocol.Agent()
-        p = '%s[%d]"%s"' % (a.PREAMBLE, len(b), b)
+        p = '%s[%08d]"%s"' % (a.PREAMBLE, len(b), b)
         a.buffer = p.encode('utf-8')
         a.find_packet()
         self.assertEqual(
