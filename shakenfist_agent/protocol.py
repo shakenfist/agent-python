@@ -22,6 +22,9 @@ class Agent(object):
         self.received_any_data = False
         self.last_data = time.time()
 
+        self.output_fileno = None
+        self.input_fileno = None
+
         self._command_map = {
             'ping': self.send_pong,
             'pong': self.noop,
@@ -86,9 +89,14 @@ class Agent(object):
         os.close(self.input_fileno)
         os.close(self.output_fileno)
 
-    # Our packet format is: *SFv001*XXXX*YYYY
-    # Where XXXX is a eight character decimal length with zero padding (i.e. 00000100)
-    # and YYYY is XXXX bytes of UTF-8 encoded JSON
+    # Our packet format is:
+    #
+    #     *SFv001*XXXXXXX*YYYY
+    #     ^........^........^
+    #     0 byte   10th byte
+    #
+    # Where XXXXXXX is a eight character decimal length with zero padding (i.e. 00000100)
+    # and YYYY is XXXXXXX bytes of UTF-8 encoded JSON
     PREAMBLE = '*SFv001*'
 
     def send_packet(self, p):
@@ -123,13 +131,9 @@ class Agent(object):
 
         # Do we have any length characters?
         blen = len(self.buffer)
-        if blen < offset + 15:
+        len_end = offset + 17
+        if blen < len_end:
             return None
-
-        # Find the end of the length field
-        len_end = offset + 9
-        while buffer_as_string[len_end].isnumeric():
-            len_end += 1
 
         # Find the length of the body of the packet
         plen = int(buffer_as_string[offset + 9: len_end])
