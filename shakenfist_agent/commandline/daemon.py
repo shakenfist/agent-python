@@ -127,13 +127,7 @@ class SFFileAgent(protocol.FileAgent):
         self.incomplete_file_puts[path]['flo'].write(d)
 
     def chmod(self, packet):
-        mode = packet['mode']
-        try:
-            int(mode)
-        except ValueError:
-            mode = symbolicmode.symbolic_to_numeric_permissions(mode)
-
-        os.chmod(packet['path'], mode)
+        symbolicmode.chmod(packet['path'], packet['mode'])
         self.send_packet({
             'command': 'chmod-response',
             'path': packet['path'],
