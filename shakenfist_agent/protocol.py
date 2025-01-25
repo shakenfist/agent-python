@@ -97,7 +97,7 @@ class Agent(object):
     #
     # Where XXXXXXX is a eight character decimal length with zero padding (i.e. 00000100)
     # and YYYY is XXXXXXX bytes of UTF-8 encoded JSON
-    PREAMBLE = '*SFv001*'
+    PREAMBLE_v1 = '*SFv001*'
 
     def send_packet(self, p):
         j = json.dumps(p)
@@ -108,7 +108,7 @@ class Agent(object):
                 'The maximum packet size is 99,999,999 bytes of UTF-8 encoded JSON. '
                 'This packet is %d bytes.' % j_len)
 
-        packet = '%s[%08d]%s' % (self.PREAMBLE, j_len, j)
+        packet = '%s[%08d]%s' % (self.PREAMBLE_v1, j_len, j)
         self._write(packet.encode('utf-8'))
         if self.log:
             self.log.debug('Sent: %s' % packet)
@@ -125,7 +125,7 @@ class Agent(object):
             self.buffer += d
 
         buffer_as_string = self.buffer.decode('utf-8')
-        offset = buffer_as_string.find(self.PREAMBLE)
+        offset = buffer_as_string.find(self.PREAMBLE_v1)
         if offset == -1:
             return None
 

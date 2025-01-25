@@ -26,7 +26,7 @@ class ProtocolTestCase(testtools.TestCase):
 
         for packet in packets:
             j = json.dumps(packet)
-            d = '%s[%08d]%s' % (a.PREAMBLE, len(j), j)
+            d = '%s[%08d]%s' % (a.PREAMBLE_v1, len(j), j)
             a.buffer += d.encode('utf-8')
         a.buffer += '*SFv0'.encode('utf-8')
 
@@ -50,13 +50,13 @@ class ProtocolTestCase(testtools.TestCase):
     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
     def test_incomplete_packet_header(self, mock_read):
         a = protocol.Agent()
-        a.buffer = a.PREAMBLE.encode('utf-8')
+        a.buffer = a.PREAMBLE_v1.encode('utf-8')
         self.assertEqual(None, a.find_packet())
 
     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
     def test_incomplete_packet_body(self, mock_read):
         a = protocol.Agent()
-        p = '%s[00000042]sdfhfg' % a.PREAMBLE
+        p = '%s[00000042]sdfhfg' % a.PREAMBLE_v1
         a.buffer = p.encode('utf-8')
         self.assertEqual(None, a.find_packet())
 
@@ -70,14 +70,14 @@ class ProtocolTestCase(testtools.TestCase):
     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
     def test_null_body(self, mock_read):
         a = protocol.Agent()
-        p = '%s[00000004]null' % a.PREAMBLE
+        p = '%s[00000004]null' % a.PREAMBLE_v1
         a.buffer = p.encode('utf-8')
         self.assertEqual(None, a.find_packet())
 
     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
     def test_small_body(self, mock_read):
         a = protocol.Agent()
-        p = '%s[00000001]1' % a.PREAMBLE
+        p = '%s[00000001]1' % a.PREAMBLE_v1
         a.buffer = p.encode('utf-8')
         self.assertEqual(1, a.find_packet())
 
@@ -85,7 +85,7 @@ class ProtocolTestCase(testtools.TestCase):
     def test_large_body(self, mock_read):
         b = 'm' * 1024
         a = protocol.Agent()
-        p = '%s[00001026]"%s"' % (a.PREAMBLE, b)
+        p = '%s[00001026]"%s"' % (a.PREAMBLE_v1, b)
         a.buffer = p.encode('utf-8')
         self.assertEqual(b, a.find_packet())
 
@@ -94,7 +94,7 @@ class ProtocolTestCase(testtools.TestCase):
     def test_json_decode_fails(self, mock_read, mock_send_packet):
         b = '{"notjson"}'
         a = protocol.Agent()
-        p = '%s[%08d]"%s"' % (a.PREAMBLE, len(b), b)
+        p = '%s[%08d]"%s"' % (a.PREAMBLE_v1, len(b), b)
         a.buffer = p.encode('utf-8')
         a.find_packet()
         self.assertEqual(

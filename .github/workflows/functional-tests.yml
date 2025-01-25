@@ -1,0 +1,182 @@
+name: Functional tests
+
+# NOTE(mikal): git repos are checked out to /srv/github/_work/{repo}/{repo}
+# which is available as GITHUB_WORKSPACE. You can find other environment
+# variables at:
+# https://docs.github.com/en/actions/learn-github-actions/environment-variables
+#
+# The can_enqueue / can_merge scheme is as described at:
+# https://boinkor.net/2023/11/neat-github-actions-patterns-for-github-merge-queues/
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  # These sanity checks used to be three separate jobs, but are now combined
+  # to save a little time and reduce CI runner churn.
+  sanity_checks:
+    runs-on: [self-hosted, vm]
+    needs: enqueue_pr_comment
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-lint
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code with two commits
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Lint with flake8
+        timeout-minutes: 5
+        run: |
+          /usr/bin/tox -eflake8
+
+      - name: Attempt to install requirements
+        timeout-minutes: 5
+        run: |
+          python3 -mvenv /tmp/venv
+          /tmp/venv/bin/pip3 install -r requirements.txt
+
+      - name: Run python3 unit tests
+        timeout-minutes: 10
+        run: |
+          /usr/bin/tox -epy3
+
+      - name: List failing tests
+        if: failure()
+        id: failures
+        run: |
+          echo "Gathering list of failed tests..."
+          touch ${GITHUB_WORKSPACE}/failed
+          /usr/bin/tox -efailing || true > ${GITHUB_WORKSPACE}/failed
+          echo
+
+          failed=$(cat ${GITHUB_WORKSPACE}/failed | egrep "^FAIL: " | \
+              sed -z 's/FAIL: shakenfist_ci\.//g;s/\n/, /g;s/, $/\n/')
+
+          echo "Failed tests:"
+          cat ${GITHUB_WORKSPACE}/failed
+          echo
+
+          echo "failures<<EOF" >> ${GITHUB_OUTPUT}
+          echo "${failed}" >> ${GITHUB_OUTPUT}
+          echo "EOF" >> ${GITHUB_OUTPUT}
+          echo "GITHUB_OUTPUT is:"
+          cat ${GITHUB_OUTPUT}
+
+      - name: Generate coverage report
+        timeout-minutes: 10
+        run: |
+          /usr/bin/tox -ecover
+          zip -r cover.zip cover
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          retention-days: 90
+          if-no-files-found: error
+          path: cover.zip
+
+      # Failures get announced here before we cancel stuff
+      - uses: slackapi/slack-github-action@v2.0.0
+        if: failure()
+        with:
+          method: chat.update
+          token: "${{ secrets.SLACK_BOT_TOKEN }}"
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_SHAKENFIST_CI }}
+            ts: "${{ needs.enqueue_pr_comment.outputs.ts }}"
+            text: |
+              The PR test attempt job at https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} failed.
+
+              PR title: ${{ github.event.pull_request.title }}
+              PR link: ${{ github.event.pull_request.html_url }}
+              PR author: ${{ github.event.pull_request.user.login }}
+            attachments:
+              - color: "ee9090"
+                fields:
+                  - title: "Status"
+                    short: true
+                    value: "Failure in sanity tests"
+
+  enqueue_pr_comment:
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    outputs:
+      ts: "${{ steps.slack.outputs.ts }}"
+      commit: "${{ steps.commit_message.outputs.commit }}"
+    steps:
+      - name: Log the github event
+        run: |
+          cat - <<EOF
+          ${{ toJSON(github.event.pull_request) }}"
+          EOF
+
+      - name: Tell people a PR test attempt is running
+        id: slack
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          method: chat.postMessage
+          token: "${{ secrets.SLACK_BOT_TOKEN }}"
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_SHAKENFIST_CI }}
+            text: |
+              A PR test attempt is running at https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} :rocket:
+
+              PR title: ${{ github.event.pull_request.title }}
+              PR link: ${{ github.event.pull_request.html_url }}
+              PR author: ${{ github.event.pull_request.user.login }}
+            attachments:
+              - color: "9090ee"
+                fields:
+                  - title: "Status"
+                    short: true
+                    value: "In Progress"
+
+  can_see_status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Immediate success"
+        run: true
+
+  can_merge:
+    needs:
+      - sanity_checks
+    if: always()
+    permissions:
+      actions: read
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          NEEDS_JSON: "${{toJSON(needs)}}"
+        name: Transform outcomes
+        run: |
+          echo "ALL_SUCCESS=$(echo "$NEEDS_JSON" | jq '. | to_entries | map([.value.result == "success", .value.result == "skipped"] | any) | all')" >>$GITHUB_ENV
+      - name: Check outcomes
+        run: "[ $ALL_SUCCESS == true ]"
+      - uses: slackapi/slack-github-action@v2.0.0
+        if: success()
+        with:
+          method: chat.update
+          token: "${{ secrets.SLACK_BOT_TOKEN }}"
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_SHAKENFIST_CI }}
+            ts: "${{ needs.enqueue_pr_comment.outputs.ts }}"
+            text: |
+              The PR test attempt job at https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} succeeded.
+
+              PR title: ${{ github.event.pull_request.title }}
+              PR link: ${{ github.event.pull_request.html_url }}
+              PR author: ${{ github.event.pull_request.user.login }}
+            attachments:
+              - color: "90ee90"
+                fields:
+                  - title: "Status"
+                    short: true
+                    value: "Success"
