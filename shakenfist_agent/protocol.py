@@ -1,3 +1,10 @@
+# I cannot take the same approach for the SF Agent as I did for the privexec
+# daemon in the Shaken Fist daemon itself -- the virtio-serial layer is a single
+# stream of bytes in each direction, not a new connection to a socket per
+# request like a unix domain socket. I therefore need to retain at least parts
+# of the agent protocol from v1 to delineate between requests. That's ok though
+# because I need that for backwards compatibility for a while at least anyway.
+
 import base64
 import copy
 import fcntl
@@ -5,7 +12,6 @@ import json
 import os
 import random
 import socket
-import sys
 import time
 
 
@@ -25,7 +31,7 @@ class Agent(object):
         self.output_fileno = None
         self.input_fileno = None
 
-        self._command_map = {
+        self._v1_command_map = {
             'ping': self.send_pong,
             'pong': self.noop,
             'json-decode-failure': self.log_error_packet,
@@ -68,7 +74,7 @@ class Agent(object):
     def add_command(self, name, meth):
         if self.log:
             self.log.debug('Registered command %s' % name)
-        self._command_map[name] = meth
+        self._v1_command_map[name] = meth
 
     def poll(self):
         if time.time() - self.last_data > 5:
@@ -91,27 +97,38 @@ class Agent(object):
 
     # Our packet format is:
     #
-    #     *SFv001*XXXXXXX*YYYY
-    #     ^........^........^
-    #     0 byte   10th byte
+    #     *SFv00[12]*XXXXXXX*YYYY
+    #     ^..........^........^
+    #     0 byte     10th byte
     #
     # Where XXXXXXX is a eight character decimal length with zero padding (i.e. 00000100)
-    # and YYYY is XXXXXXX bytes of UTF-8 encoded JSON
-    PREAMBLE_v1 = '*SFv001*'
+    # and YYYY is XXXXXXX bytes of UTF-8 encoded JSON for v1 or encoded protobuf
+    # for v2.
+    PREAMBLE_COMMON = b'*SFv00'
+    PREAMBLE_v1 = b'*SFv001*'
+    PREAMBLE_v2 = b'*SFv002*'
 
-    def send_packet(self, p):
-        j = json.dumps(p)
-        j_len = len(j)
+    def send_v1_packet(self, p):
+        data = json.dumps(p).encode()
+        length = len(data)
 
-        if j_len > 99999999:
+        if length > 99999999:
             raise PacketTooLarge(
                 'The maximum packet size is 99,999,999 bytes of UTF-8 encoded JSON. '
-                'This packet is %d bytes.' % j_len)
+                f'This packet is {length} bytes.')
 
-        packet = '%s[%08d]%s' % (self.PREAMBLE_v1, j_len, j)
-        self._write(packet.encode('utf-8'))
+        self._send_packet(self.PREAMBLE_v1, length, data)
+
+    def _send_packet(self, preamble, length, data, body_is_binary=False):
+        length_stanza = f'[{length:08}]'
+        packet = preamble + length_stanza.encode() + data
+        self._write(packet)
+
         if self.log:
-            self.log.debug('Sent: %s' % packet)
+            if body_is_binary:
+                self.log.debug(f'Sent: {packet[:16]} ...binary data...')
+            else:
+                self.log.debug(f'Sent: {packet}')
 
     def find_packets(self):
         packet = self.find_packet()
@@ -124,19 +141,23 @@ class Agent(object):
         if d:
             self.buffer += d
 
-        buffer_as_string = self.buffer.decode('utf-8')
-        offset = buffer_as_string.find(self.PREAMBLE_v1)
+        offset = self.buffer.find(self.PREAMBLE_COMMON)
         if offset == -1:
+            return None
+
+        # Is the version recognized?
+        version = int(self.buffer[offset + 4:offset + 7].decode())
+        if version not in [1, 2]:
             return None
 
         # Do we have any length characters?
         blen = len(self.buffer)
-        len_end = offset + 17
+        len_end = offset + 18
         if blen < len_end:
             return None
 
         # Find the length of the body of the packet
-        plen = int(buffer_as_string[offset + 9: len_end])
+        plen = int(self.buffer[offset + 10: len_end])
         if blen < len_end + 1 + plen:
             return None
 
@@ -150,7 +171,7 @@ class Agent(object):
             if self.log:
                 self.log.with_fields({'packet': packet_as_string}).error(
                     'Failed to JSON decode packet')
-            self.send_packet(
+            self.send_v1_packet(
                 {
                     'command': 'json-decode-failure',
                     'message': ('failed to JSON decode packet: %s'
@@ -165,14 +186,14 @@ class Agent(object):
             self.log.debug('Processing: %s' % lp)
         command = packet.get('command')
 
-        if command in self._command_map:
+        if command in self._v1_command_map:
             try:
-                self._command_map[command](packet)
+                self._v1_command_map[command](packet)
             except Exception as e:
                 if self.log:
                     self.log.with_fields({'error': str(e)}).error(
                         'Command %s raised an error')
-                self.send_packet(
+                self.send_v1_packet(
                     {
                         'command': 'command-error',
                         'message': 'command %s raised an error: %s' % (command, e)
@@ -180,8 +201,8 @@ class Agent(object):
         else:
             if self.log:
                 self.log.error('Could not find command "%s" in %s'
-                               % (command, self._command_map.keys()))
-            self.send_packet(
+                               % (command, self._v1_command_map.keys()))
+            self.send_v1_packet(
                 {
                     'command': 'unknown-command',
                     'message': '%s is an unknown command' % command
@@ -198,20 +219,20 @@ class Agent(object):
         if not unique:
             unique = random.randint(0, 65535)
 
-        self.send_packet({
+        self.send_v1_packet({
             'command': 'ping',
             'unique': unique
         })
 
     def send_pong(self, packet):
-        self.send_packet({
+        self.send_v1_packet({
             'command': 'pong',
             'unique': packet['unique']
         })
 
     def _path_is_a_file(self, command, path, unique):
         if not path:
-            self.send_packet({
+            self.send_v1_packet({
                 'command': '%s-response' % command,
                 'result': False,
                 'message': 'path is not set',
@@ -220,7 +241,7 @@ class Agent(object):
             return 'path is not set'
 
         if not os.path.exists(path):
-            self.send_packet({
+            self.send_v1_packet({
                 'command': '%s-response' % command,
                 'result': False,
                 'path': path,
@@ -230,7 +251,7 @@ class Agent(object):
             return 'path does not exist'
 
         if not os.path.isfile(path):
-            self.send_packet({
+            self.send_v1_packet({
                 'command': '%s-response' % command,
                 'result': False,
                 'path': path,
@@ -243,7 +264,7 @@ class Agent(object):
 
     def _send_file(self, command, source_path, destination_path, unique):
         st = os.stat(source_path, follow_symlinks=True)
-        self.send_packet({
+        self.send_v1_packet({
             'command': command,
             'result': True,
             'path': destination_path,
@@ -263,7 +284,7 @@ class Agent(object):
         with open(source_path, 'rb') as f:
             d = f.read(1024)
             while d:
-                self.send_packet({
+                self.send_v1_packet({
                     'command': command,
                     'result': True,
                     'path': destination_path,
@@ -275,7 +296,7 @@ class Agent(object):
                 offset += len(d)
                 d = f.read(1024)
 
-            self.send_packet({
+            self.send_v1_packet({
                 'command': command,
                 'result': True,
                 'path': destination_path,
@@ -286,27 +307,19 @@ class Agent(object):
             })
 
 
-class SocketAgent(Agent):
+class UnixDomainSocketAgent(Agent):
     def __init__(self, path, logger=None):
-        super(SocketAgent, self).__init__(logger=logger)
-        self.s = socket.socket(socket.AF_UNIX)
+        super().__init__(logger=logger)
+        self.s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.s.connect(path)
         self.input_fileno = self.s.fileno()
         self.output_fileno = self.s.fileno()
         self.set_fd_nonblocking(self.input_fileno)
 
 
-class FileAgent(Agent):
+class CharacterDeviceAgent(Agent):
     def __init__(self, path, logger=None):
-        super(FileAgent, self).__init__(logger=logger)
+        super().__init__(logger=logger)
         self.input_fileno = os.open(path, os.O_RDWR)
         self.output_fileno = self.input_fileno
-        self.set_fd_nonblocking(self.input_fileno)
-
-
-class StdInOutAgent(Agent):
-    def __init__(self, logger=None):
-        super(StdInOutAgent, self).__init__(logger=logger)
-        self.input_fileno = sys.stdin.fileno()
-        self.output_fileno = sys.stdout.fileno()
         self.set_fd_nonblocking(self.input_fileno)

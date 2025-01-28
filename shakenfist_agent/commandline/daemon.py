@@ -25,9 +25,9 @@ def daemon():
     pass
 
 
-class SFFileAgent(protocol.FileAgent):
+class SFCharacterDeviceAgent(protocol.CharacterDeviceAgent):
     def __init__(self, path, logger=None):
-        super(SFFileAgent, self).__init__(path, logger=logger)
+        super(SFCharacterDeviceAgent, self).__init__(path, logger=logger)
 
         self.watched_files = {}
         self.executing_commands = []
@@ -41,7 +41,7 @@ class SFFileAgent(protocol.FileAgent):
         self.add_command('watch-file', self.watch_file)
         self.add_command('execute', self.execute)
 
-        self.send_packet({
+        self.send_v1_packet({
             'command': 'agent-start',
             'message': 'version %s' % VersionInfo('shakenfist_agent').version_string(),
             'system_boot_time': psutil.boot_time(),
@@ -54,18 +54,18 @@ class SFFileAgent(protocol.FileAgent):
         self.incomplete_file_puts = {}
 
     def close(self):
-        self.send_packet({
+        self.send_v1_packet({
             'command': 'agent-stop',
             'system_boot_time': psutil.boot_time(),
             'unique': str(time.time())
         })
-        super(SFFileAgent, self).close()
+        super(SFCharacterDeviceAgent, self).close()
 
     def is_system_running(self, packet):
         out, _ = processutils.execute(
             'systemctl is-system-running', shell=True, check_exit_code=False)
         out = out.rstrip()
-        self.send_packet({
+        self.send_v1_packet({
             'command': 'is-system-running-response',
             'result': out == 'running',
             'message': out,
@@ -96,7 +96,7 @@ class SFFileAgent(protocol.FileAgent):
                 with open(path) as f:
                     facts['ssh-host-keys'][kind] = f.read()
 
-        self.send_packet({
+        self.send_v1_packet({
             'command': 'gather-facts-response',
             'result': facts,
             'unique': packet.get('unique', str(time.time()))
@@ -116,7 +116,7 @@ class SFFileAgent(protocol.FileAgent):
             self.incomplete_file_puts[path]['flo'].close()
             del self.incomplete_file_puts[path]
             self.log.with_fields(packet).info('File put complete')
-            self.send_packet({
+            self.send_v1_packet({
                 'command': 'put-file-response',
                 'path': packet['path'],
                 'unique': packet['unique']
@@ -128,7 +128,7 @@ class SFFileAgent(protocol.FileAgent):
 
     def chmod(self, packet):
         symbolicmode.chmod(packet['path'], packet['mode'])
-        self.send_packet({
+        self.send_v1_packet({
             'command': 'chmod-response',
             'path': packet['path'],
             'unique': packet.get('unique', str(time.time()))
@@ -136,7 +136,7 @@ class SFFileAgent(protocol.FileAgent):
 
     def chown(self, packet):
         shutil.chown(packet.get('path'), user=packet.get('user'), group=packet.get('group'))
-        self.send_packet({
+        self.send_v1_packet({
             'command': 'chown-response',
             'path': packet['path'],
             'unique': packet.get('unique', str(time.time()))
@@ -172,7 +172,7 @@ class SFFileAgent(protocol.FileAgent):
 
         for fd in exceptional:
             if fd in self.watched_files:
-                self.send_packet({
+                self.send_v1_packet({
                     'command': 'watch-file-response',
                     'result': True,
                     'path': self.watched_files[fd]['path'],
@@ -183,7 +183,7 @@ class SFFileAgent(protocol.FileAgent):
         for fd in readable:
             if fd in self.watched_files:
                 try:
-                    self.send_packet({
+                    self.send_v1_packet({
                         'command': 'watch-file-response',
                         'result': True,
                         'path': self.watched_files[fd]['path'],
@@ -196,7 +196,7 @@ class SFFileAgent(protocol.FileAgent):
     def execute(self, packet):
         unique = packet.get('unique', str(time.time()))
         if 'command-line' not in packet:
-            self.send_packet({
+            self.send_v1_packet({
                 'command': 'execute-response',
                 'result': False,
                 'message': 'command-line is not set',
@@ -208,7 +208,7 @@ class SFFileAgent(protocol.FileAgent):
             try:
                 out, err = processutils.execute(
                     packet['command-line'], shell=True, check_exit_code=True)
-                self.send_packet({
+                self.send_v1_packet({
                     'command': 'execute-response',
                     'command-line': packet['command-line'],
                     'result': True,
@@ -220,7 +220,7 @@ class SFFileAgent(protocol.FileAgent):
                 return
 
             except processutils.ProcessExecutionError as e:
-                self.send_packet({
+                self.send_v1_packet({
                     'command': 'execute-response',
                     'command-line': packet['command-line'],
                     'result': False,
@@ -239,7 +239,7 @@ class SFFileAgent(protocol.FileAgent):
         p.start()
         self.executing_commands.append(p)
 
-        self.send_packet({
+        self.send_v1_packet({
             'command': 'execute-response',
             'command-line': packet['command-line'],
             'pid': p.pid,
@@ -277,7 +277,8 @@ def daemon_run(ctx):
         while not os.path.exists(SIDE_CHANNEL_PATH):
             time.sleep(60)
 
-    CHANNEL = SFFileAgent(SIDE_CHANNEL_PATH, logger=ctx.obj['LOGGER'])
+    CHANNEL = SFCharacterDeviceAgent(
+        SIDE_CHANNEL_PATH, logger=ctx.obj['LOGGER'])
     CHANNEL.send_ping()
 
     while True:

@@ -6,7 +6,7 @@ import testtools
 from shakenfist_agent import protocol
 
 
-class ProtocolTestCase(testtools.TestCase):
+class ProtocolV1TestCase(testtools.TestCase):
     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
     def test_yield_queued_packets(self, mock_read):
         a = protocol.Agent()
@@ -50,7 +50,7 @@ class ProtocolTestCase(testtools.TestCase):
     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
     def test_incomplete_packet_header(self, mock_read):
         a = protocol.Agent()
-        a.buffer = a.PREAMBLE_v1.encode('utf-8')
+        a.buffer = a.PREAMBLE_v1
         self.assertEqual(None, a.find_packet())
 
     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
@@ -89,9 +89,9 @@ class ProtocolTestCase(testtools.TestCase):
         a.buffer = p.encode('utf-8')
         self.assertEqual(b, a.find_packet())
 
-    @mock.patch('shakenfist_agent.protocol.Agent.send_packet')
+    @mock.patch('shakenfist_agent.protocol.Agent.send_v1_packet')
     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
-    def test_json_decode_fails(self, mock_read, mock_send_packet):
+    def test_json_decode_fails(self, mock_read, mock_send_v1_packet):
         b = '{"notjson"}'
         a = protocol.Agent()
         p = '%s[%08d]"%s"' % (a.PREAMBLE_v1, len(b), b)
@@ -101,4 +101,22 @@ class ProtocolTestCase(testtools.TestCase):
             [mock.call({
                 'command': 'json-decode-failure',
                 'message': 'failed to JSON decode packet: "{"notjson"'
-                })], mock_send_packet.mock_calls)
+            })], mock_send_v1_packet.mock_calls)
+
+
+class ProtocolV2TestCase(testtools.TestCase):
+    @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
+    def test_small_body(self, mock_read):
+        a = protocol.Agent()
+        p = '%s[00000001]1' % a.PREAMBLE_v2
+        a.buffer = p.encode('utf-8')
+        self.assertEqual(1, a.find_packet())
+
+
+class ProtocolBadVersionTestCase(testtools.TestCase):
+    @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
+    def test_small_body(self, mock_read):
+        a = protocol.Agent()
+        p = '*SFv009*[00000001]1'
+        a.buffer = p.encode('utf-8')
+        self.assertEqual(None, a.find_packet())
