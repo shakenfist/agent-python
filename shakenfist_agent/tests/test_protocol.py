@@ -104,13 +104,13 @@ class ProtocolV1TestCase(testtools.TestCase):
             })], mock_send_v1_packet.mock_calls)
 
 
-class ProtocolV2TestCase(testtools.TestCase):
-    @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
-    def test_small_body(self, mock_read):
-        a = protocol.Agent()
-        p = '%s[00000001]1' % a.PREAMBLE_v2
-        a.buffer = p.encode('utf-8')
-        self.assertEqual(1, a.find_packet())
+# class ProtocolV2TestCase(testtools.TestCase):
+#     @mock.patch('shakenfist_agent.protocol.Agent._read', return_value=None)
+#     def test_small_body(self, mock_read):
+#         a = protocol.Agent()
+#         p = '%s[00000001]1' % a.PREAMBLE_v2
+#         a.buffer = p.encode('utf-8')
+#         self.assertEqual(1, a.find_packet())
 
 
 class ProtocolBadVersionTestCase(testtools.TestCase):

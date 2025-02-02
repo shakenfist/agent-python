@@ -150,21 +150,36 @@ class Agent(object):
         if version not in [1, 2]:
             return None
 
-        # Do we have any length characters?
+        # Do we have the complete length field?
         blen = len(self.buffer)
         len_end = offset + 18
         if blen < len_end:
             return None
 
-        # Find the length of the body of the packet
+        # Find the length of the body of the packet and make sure we have that
+        # much buffered
         plen = int(self.buffer[offset + 10: len_end])
         if blen < len_end + 1 + plen:
             return None
 
-        # Extract and parse the body of the packet
-        packet = self.buffer[len_end + 1: len_end + 1 + plen]
-        packet_as_string = packet.decode('utf-8')
+        # The arguments to the packet parsers are the offset to the start of
+        # the packet and its length. This does not include the header we
+        # dealt with here.
+        out = None
+        if version == 1:
+            out = self._find_packet_v1(len_end + 1, plen)
+        if version == 2:
+            out = self._find_packet_v2(len_end + 1, plen)
+
+        # Remove this packet from the buffer
         self.buffer = self.buffer[len_end + 1 + plen:]
+        return out
+
+    def _find_packet_v1(self, offset, length):
+        # Extract and parse the body of the packet
+        packet = self.buffer[offset: offset + length]
+        packet_as_string = packet.decode('utf-8')
+
         try:
             return json.loads(packet_as_string)
         except json.JSONDecodeError:
@@ -177,6 +192,11 @@ class Agent(object):
                     'message': ('failed to JSON decode packet: %s'
                                 % packet.decode('utf-8'))
                 })
+            return None
+
+    def _find_packet_v2(self, offset, length):
+        # Not yet implemented
+        return None
 
     def dispatch_packet(self, packet):
         if self.log:
