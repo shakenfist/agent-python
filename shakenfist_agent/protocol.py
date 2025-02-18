@@ -64,7 +64,8 @@ class Agent(object):
         except BlockingIOError:
             if self.log:
                 self.log.info(
-                    'Discarded write due to non-blocking IO error, no connection?')
+                    'Discarded write due to non-blocking IO error, '
+                    'no connection?')
             pass
 
     def set_fd_nonblocking(self, fd):
@@ -97,31 +98,29 @@ class Agent(object):
 
     # Our packet format is:
     #
-    #     *SFv00[12]*XXXXXXX*YYYY
-    #     ^..........^........^
-    #     0 byte     10th byte
+    #     *SFvVVV[XXXXXXX]YYYY...
     #
-    # Where XXXXXXX is a eight character decimal length with zero padding (i.e. 00000100)
-    # and YYYY is XXXXXXX bytes of UTF-8 encoded JSON for v1 or encoded protobuf
-    # for v2.
+    # Where:
+    #   VVV is a three character decimal protcol version number with padding.
+    #   XXXXXXX is a eight character decimal length with padding.
+    #   YYYY is XXXXXXX bytes of UTF-8 encoded JSON for v1 or encoded
+    #     protobuf for v2.
     PREAMBLE_COMMON = b'*SFv00'
-    PREAMBLE_v1 = b'*SFv001*'
-    PREAMBLE_v2 = b'*SFv002*'
+    PREAMBLE_v1 = b'*SFv001'
+    PREAMBLE_v2 = b'*SFv002'
 
     def send_v1_packet(self, p):
         data = json.dumps(p).encode()
-        length = len(data)
+        self._send_packet(self.PREAMBLE_v1, data)
 
+    def _send_packet(self, preamble, data, body_is_binary=False):
+        length = len(data)
         if length > 99999999:
             raise PacketTooLarge(
                 'The maximum packet size is 99,999,999 bytes of UTF-8 encoded JSON. '
                 f'This packet is {length} bytes.')
 
-        self._send_packet(self.PREAMBLE_v1, length, data)
-
-    def _send_packet(self, preamble, length, data, body_is_binary=False):
-        length_stanza = f'[{length:08}]'
-        packet = preamble + length_stanza.encode() + data
+        packet = preamble + f'[{length:08}]'.encode() + data
         self._write(packet)
 
         if self.log:
@@ -152,13 +151,14 @@ class Agent(object):
 
         # Do we have the complete length field?
         blen = len(self.buffer)
-        len_end = offset + 18
-        if blen < len_end:
+        len_start = offset + len(self.PREAMBLE_v1) + 1
+        len_end = len_start + 8
+        if blen < len_end + 1:
             return None
 
         # Find the length of the body of the packet and make sure we have that
         # much buffered
-        plen = int(self.buffer[offset + 10: len_end])
+        plen = int(self.buffer[len_start: len_end])
         if blen < len_end + 1 + plen:
             return None
 
@@ -178,13 +178,12 @@ class Agent(object):
     def _find_packet_v1(self, offset, length):
         # Extract and parse the body of the packet
         packet = self.buffer[offset: offset + length]
-        packet_as_string = packet.decode('utf-8')
 
         try:
-            return json.loads(packet_as_string)
+            return json.loads(packet)
         except json.JSONDecodeError:
             if self.log:
-                self.log.with_fields({'packet': packet_as_string}).error(
+                self.log.with_fields({'packet': packet}).error(
                     'Failed to JSON decode packet')
             self.send_v1_packet(
                 {
