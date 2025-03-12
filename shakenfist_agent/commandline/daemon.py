@@ -1,6 +1,7 @@
 import base64
 import click
 import distro
+import fcntl
 from linux_utils.fstab import find_mounted_filesystems
 import multiprocessing
 import os
@@ -10,19 +11,67 @@ import psutil
 import select
 import shutil
 import signal
+import socket
+import struct
 import symbolicmode
-import sys
 import time
+import threading
+
+from shakenfist_utilities import random as sf_random
 
 from shakenfist_agent import protocol
 
 
 SIDE_CHANNEL_PATH = '/dev/virtio-ports/sf-agent'
+VSOCK_PORT = 1025
+EXIT = threading.Event()
 
 
 @click.group(help='Daemon commands')
 def daemon():
     pass
+
+
+class AgentJob:
+    def __init__(self, logger):
+        self.logger = logger
+
+
+class SerialAgentJob(AgentJob):
+    def run(self):
+        if not os.path.exists(SIDE_CHANNEL_PATH):
+            click.echo('Side channel missing, will periodically check.')
+
+            while not os.path.exists(SIDE_CHANNEL_PATH):
+                time.sleep(60)
+
+        CHANNEL = SFCharacterDeviceAgent(SIDE_CHANNEL_PATH, logger=self.logger)
+        CHANNEL.send_ping()
+
+        while True:
+            for packet in CHANNEL.find_packets():
+                CHANNEL.dispatch_packet(packet)
+            CHANNEL.watch_files()
+            CHANNEL.reap_processes()
+
+
+class VSockAgentJob(AgentJob):
+    def __init__(self, logger, conn):
+        super().__init__(logger)
+        self.conn = conn
+
+    def run(self):
+        while True:
+            buf = self.conn.recv(1024)
+            click.echo(f' in: {buf}')
+            if not buf:
+                click.echo('Nothing received, exiting')
+                break
+
+            click.echo(f'out: {buf}')
+            self.conn.sendall(buf)
+
+        self.conn.close()
 
 
 class SFCharacterDeviceAgent(protocol.CharacterDeviceAgent):
@@ -257,35 +306,95 @@ CHANNEL = None
 
 
 def exit_gracefully(sig, _frame):
+    global EXIT
     if sig == signal.SIGTERM:
-        print('Caught SIGTERM, gracefully exiting')
-        if CHANNEL:
-            CHANNEL.close()
-        sys.exit()
+        click.echo('Received SIGTERM')
+        EXIT.set()
 
 
 @daemon.command(name='run', help='Run the sf-agent daemon')
 @click.pass_context
 def daemon_run(ctx):
     global CHANNEL
+    global EXIT
 
     signal.signal(signal.SIGTERM, exit_gracefully)
 
-    if not os.path.exists(SIDE_CHANNEL_PATH):
-        click.echo('Side channel missing, will periodically check.')
+    # Start the v1 thread
+    v1 = SerialAgentJob(ctx.obj['LOGGER'])
+    v1_thread = threading.Thread(target=v1.run, daemon=True, name='v1')
+    v1_thread.start()
 
-        while not os.path.exists(SIDE_CHANNEL_PATH):
-            time.sleep(60)
+    # Start listening for v2 connections on the vsock.
 
-    CHANNEL = SFCharacterDeviceAgent(
-        SIDE_CHANNEL_PATH, logger=ctx.obj['LOGGER'])
-    CHANNEL.send_ping()
+    # Lookup our CID. This is a 32 bit unsigned int returned from an ioctl
+    # against /dev/vsock. As best as I can tell the empty string argument
+    # at the end is because that is used as a buffer to return the result
+    # in. Yes really.
+    with open('/dev/vsock', 'rb') as f:
+        r = fcntl.ioctl(f, socket.IOCTL_VM_SOCKETS_GET_LOCAL_CID, '    ')
+        cid = struct.unpack('I', r)[0]
+    click.echo(f'Our v2 vsock CID is {cid}.')
 
-    while True:
-        for packet in CHANNEL.find_packets():
-            CHANNEL.dispatch_packet(packet)
-        CHANNEL.watch_files()
-        CHANNEL.reap_processes()
+    s = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
+    s.bind((cid, VSOCK_PORT))
+    s.listen()
+    s.settimeout(0.2)
+    click.echo('Listening for incoming v2 requests')
+
+    workers = {}
+    while not EXIT.is_set():
+        try:
+            conn, (remote_cid, remote_port) = s.accept()
+            click.echo(f'Connection from {remote_cid} on with remote port '
+                       f'{remote_port}')
+        except socket.timeout:
+            conn = None
+
+        if conn:
+            thread_name = sf_random.random_id()
+            worker_object = VSockAgentJob(conn)
+            worker_thread = threading.Thread(
+                target=worker_object.run, daemon=True, name=thread_name)
+            workers[thread_name] = {
+                'object': worker_object,
+                'thread': worker_thread
+            }
+            worker_thread.start()
+
+        remaining_workers = {}
+        for thread_name in workers:
+            if workers[thread_name]['thread'].is_alive():
+                remaining_workers[thread_name] = workers[thread_name]
+            else:
+                workers[thread_name]['thread'].join(0.2)
+        workers = remaining_workers
+
+    click.echo('Stopping')
+
+    while workers:
+        click.echo(f'There are {len(workers)} remaining workers')
+
+        remaining_workers = {}
+        for thread_name in workers:
+            if workers[thread_name]['thread'].is_alive():
+                remaining_workers[thread_name] = workers[thread_name]
+                click.echo(f'Thread is still executing {thread_name}')
+            else:
+                click.echo(f'Reaping thread: {thread_name}')
+                workers[thread_name]['thread'].join(0.2)
+
+        workers = remaining_workers
+        if workers:
+            time.sleep(5)
+
+    click.echo(f'There are {len(workers)} remaining workers')
+    click.echo('Stopped')
+
+    # This is here because sometimes the grpc bits don't shut down cleanly
+    # by themselves.
+    click.echo('Terminating ourselves')
+    raise SystemExit(0)
 
 
 daemon.add_command(daemon_run)
