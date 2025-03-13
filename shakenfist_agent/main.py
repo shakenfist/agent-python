@@ -1,9 +1,9 @@
 # Copyright 2022 Michael Still
 
 import click
-from shakenfist_utilities import logs
 import logging
 
+from shakenfist_utilities import logs
 
 from shakenfist_agent.commandline import daemon
 
