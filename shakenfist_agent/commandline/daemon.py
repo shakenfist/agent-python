@@ -17,6 +17,7 @@ import symbolicmode
 import time
 import threading
 
+from shakenfist_utilities import logs
 from shakenfist_utilities import random as sf_random
 
 from shakenfist_agent import protocol
@@ -25,6 +26,7 @@ from shakenfist_agent import protocol
 SIDE_CHANNEL_PATH = '/dev/virtio-ports/sf-agent'
 VSOCK_PORT = 1025
 EXIT = threading.Event()
+LOG = logs.setup_console(__name__)
 
 
 @click.group(help='Daemon commands')
@@ -353,7 +355,13 @@ def daemon_run(ctx):
 
         if conn:
             thread_name = sf_random.random_id()
-            worker_object = VSockAgentJob(conn)
+            log = LOG.with_fields({
+                'remote_cid': remote_cid,
+                'remote_port': remote_port,
+                'thread_name': thread_name
+            })
+
+            worker_object = VSockAgentJob(log, conn)
             worker_thread = threading.Thread(
                 target=worker_object.run, daemon=True, name=thread_name)
             workers[thread_name] = {
