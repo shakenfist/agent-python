@@ -67,9 +67,9 @@ class VSockAgentJob(AgentJob):
     def run(self):
         buffered = bytearray()
         while True:
-            input = self.sock.recv(102400)
+            input = self.conn.recv(102400)
             if not input:
-                return
+                break
 
             buffered += input
 
@@ -81,6 +81,7 @@ class VSockAgentJob(AgentJob):
 
             response = None
             if request.HasField('hypervisor_welcome'):
+                LOG.debug('... hypervisor welcome')
                 version_string = VersionInfo(
                     'shakenfist_agent').version_string()
                 response = agent_pb2.AgentReplyCommand(
@@ -90,14 +91,68 @@ class VSockAgentJob(AgentJob):
                         boot_time=psutil.boot_time()
                     )
                 )
+
             elif request.HasField('ping_request'):
+                LOG.debug('... ping')
                 response = agent_pb2.AgentReplyCommand(
                     command_id=request.command_id,
                     ping_reply=agent_pb2.PingReply()
                 )
 
+            elif request.HasField('is_system_running_request'):
+                LOG.debug('... is system running')
+                out, _ = processutils.execute(
+                    'systemctl is-system-running', shell=True,
+                    check_exit_code=False)
+                out = out.rstrip()
+                response = agent_pb2.AgentReplyCommand(
+                    command_id=request.command_id,
+                    is_system_running_reply=agent_pb2.IsSystemRunningReply(
+                        result=out == 'running',
+                        message=out,
+                        boot_time=psutil.boot_time()
+                    )
+                )
+
+            elif request.HasField('gather_facts_request'):
+                LOG.debug('... gather facts')
+                gather_facts_reply = agent_pb2.GatherFactsReply()
+
+                di = distro.info()
+                for key in di:
+                    gather_facts_reply.distro_facts.add(
+                        name=key,
+                        value=di[key]
+                    )
+
+                # We should allow this agent to at least run on MacOS
+                if di['id'] != 'darwin':
+                    for entry in find_mounted_filesystems():
+                        gather_facts_reply.mount_points.add(
+                            device=entry.device,
+                            mount_point=entry.mount_point,
+                            vfs_type=entry.vfs_type
+                        )
+
+                for kind, path in [
+                        ('rsa', '/etc/ssh/ssh_host_rsa_key.pub'),
+                        ('ecdsa',  '/etc/ssh/ssh_host_ecdsa_key.pub'),
+                        ('ed25519', '/etc/ssh/ssh_host_ed25519_key.pub')
+                ]:
+                    if os.path.exists(path):
+                        with open(path) as f:
+                            gather_facts_reply.ssh_host_keys.add(
+                                name=kind,
+                                value=f.read()
+                            )
+
+                response = agent_pb2.AgentReplyCommand(
+                    command_id=request.command_id,
+                    gather_facts_reply=gather_facts_reply
+                )
+
             if response:
-                self.sock.sendall(response.SerializeToString())
+                self.conn.sendall(response.SerializeToString())
 
         self.conn.close()
 
