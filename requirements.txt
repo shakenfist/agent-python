@@ -5,3 +5,9 @@ linux-utils          # mit
 psutil>5.9.0         # bsd
 shakenfist-utilities # apache2
 symbolicmode>=2.0    # CC0 1.0 Universal (CC0 1.0) Public Domain Dedication
+
+protobuf==5.29.3                   # bsd
+grpcio==1.70.0                     # apache2
+grpcio-status==1.70.0              # apache2
+grpcio-tools==1.70.0               # apache2
+googleapis-common-protos==1.66.0   # apache2

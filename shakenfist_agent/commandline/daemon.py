@@ -13,6 +13,7 @@ import shutil
 import signal
 import socket
 import struct
+import sys
 import symbolicmode
 import time
 import threading
@@ -21,6 +22,7 @@ from shakenfist_utilities import logs
 from shakenfist_utilities import random as sf_random
 
 from shakenfist_agent import protocol
+from shakenfist_agent.protos import agent_pb2
 
 
 SIDE_CHANNEL_PATH = '/dev/virtio-ports/sf-agent'
@@ -63,15 +65,39 @@ class VSockAgentJob(AgentJob):
         self.conn = conn
 
     def run(self):
+        buffered = bytearray()
         while True:
-            buf = self.conn.recv(1024)
-            click.echo(f' in: {buf}')
-            if not buf:
-                click.echo('Nothing received, exiting')
-                break
+            input = self.sock.recv(102400)
+            if not input:
+                return
 
-            click.echo(f'out: {buf}')
-            self.conn.sendall(buf)
+            buffered += input
+
+            request = agent_pb2.AgentRequestCommand()
+            consumed = request.ParseFromString(buffered)
+            if consumed == 0:
+                continue
+            buffered = buffered[consumed:]
+
+            response = None
+            if request.HasField('hypervisor_welcome'):
+                version_string = VersionInfo(
+                    'shakenfist_agent').version_string()
+                response = agent_pb2.AgentReplyCommand(
+                    command_id=request.command_id,
+                    agent_welcome=agent_pb2.AgentWelcome(
+                        version=f'version {version_string}',
+                        boot_time=psutil.boot_time()
+                    )
+                )
+            elif request.HasField('ping_request'):
+                response = agent_pb2.AgentReplyCommand(
+                    command_id=request.command_id,
+                    ping_reply=agent_pb2.PingReply()
+                )
+
+            if response:
+                self.sock.sendall(response.SerializeToString())
 
         self.conn.close()
 
@@ -328,6 +354,9 @@ def daemon_run(ctx):
     v1_thread.start()
 
     # Start listening for v2 connections on the vsock.
+    if not os.path.exists('/dev/vsock'):
+        click.echo('No /dev/vsock')
+        sys.exit(1)
 
     # Lookup our CID. This is a 32 bit unsigned int returned from an ioctl
     # against /dev/vsock. As best as I can tell the empty string argument
