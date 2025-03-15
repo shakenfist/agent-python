@@ -64,6 +64,12 @@ class VSockAgentJob(AgentJob):
         super().__init__(logger)
         self.conn = conn
 
+    def _send_responses(self, commands):
+        out = agent_pb2.AgentReply()
+        for cmd in commands:
+            out.commands.append(cmd)
+        self.conn.sendall(out.SerializeToString())
+
     def run(self):
         try:
             buffered = bytearray()
@@ -74,107 +80,120 @@ class VSockAgentJob(AgentJob):
 
                 buffered += input
 
-                request = agent_pb2.AgentRequestCommand()
-                consumed = request.ParseFromString(buffered)
+                envelope = agent_pb2.AgentRequest()
+                consumed = envelope.ParseFromString(buffered)
                 if consumed == 0:
                     continue
                 buffered = buffered[consumed:]
 
-                response = None
-                if request.HasField('hypervisor_welcome'):
-                    LOG.debug('...hypervisor welcome')
-                    version_string = VersionInfo(
-                        'shakenfist_agent').version_string()
-                    response = agent_pb2.AgentReplyCommand(
-                        command_id=request.command_id,
-                        agent_welcome=agent_pb2.AgentWelcome(
-                            version=f'version {version_string}',
-                            boot_time=psutil.boot_time()
-                        )
-                    )
-
-                elif request.HasField('ping_request'):
-                    LOG.debug('...ping')
-                    response = agent_pb2.AgentReplyCommand(
-                        command_id=request.command_id,
-                        ping_reply=agent_pb2.PingReply()
-                    )
-
-                elif request.HasField('is_system_running_request'):
-                    LOG.debug('...is system running')
-                    out, _ = processutils.execute(
-                        'systemctl is-system-running', shell=True,
-                        check_exit_code=False)
-                    out = out.rstrip()
-                    response = agent_pb2.AgentReplyCommand(
-                        command_id=request.command_id,
-                        is_system_running_reply=agent_pb2.IsSystemRunningReply(
-                            result=out == 'running',
-                            message=out,
-                            boot_time=psutil.boot_time()
-                        )
-                    )
-
-                elif request.HasField('gather_facts_request'):
-                    LOG.debug('...gather facts')
-                    gather_facts_reply = agent_pb2.GatherFactsReply()
-
-                    di = distro.info()
-                    for key in di:
-                        gather_facts_reply.distro_facts.add(
-                            name=key,
-                            value=di[key]
+                responses = []
+                for request in envelope.commands:
+                    if request.HasField('hypervisor_welcome'):
+                        LOG.debug('...hypervisor welcome')
+                        version_string = VersionInfo(
+                            'shakenfist_agent').version_string()
+                        responses.append(
+                            agent_pb2.AgentReplyCommand(
+                                command_id=request.command_id,
+                                agent_welcome=agent_pb2.AgentWelcome(
+                                    version=f'version {version_string}',
+                                    boot_time=psutil.boot_time()
+                                )
+                            )
                         )
 
-                    # We should allow this agent to at least run on MacOS
-                    if di['id'] != 'darwin':
-                        for entry in find_mounted_filesystems():
-                            gather_facts_reply.mount_points.add(
-                                device=entry.device,
-                                mount_point=entry.mount_point,
-                                vfs_type=entry.vfs_type
+                    elif request.HasField('ping_request'):
+                        LOG.debug('...ping')
+                        responses.append(
+                            agent_pb2.AgentReplyCommand(
+                                command_id=request.command_id,
+                                ping_reply=agent_pb2.PingReply()
+                            )
+                        )
+
+                    elif request.HasField('is_system_running_request'):
+                        LOG.debug('...is system running')
+                        out, _ = processutils.execute(
+                            'systemctl is-system-running', shell=True,
+                            check_exit_code=False)
+                        out = out.rstrip()
+                        responses.append(
+                            agent_pb2.AgentReplyCommand(
+                                command_id=request.command_id,
+                                is_system_running_reply=agent_pb2.IsSystemRunningReply(
+                                    result=out == 'running',
+                                    message=out,
+                                    boot_time=psutil.boot_time()
+                                )
+                            )
+                        )
+
+                    elif request.HasField('gather_facts_request'):
+                        LOG.debug('...gather facts')
+                        gather_facts_reply = agent_pb2.GatherFactsReply()
+
+                        di = distro.info()
+                        for key in di:
+                            gather_facts_reply.distro_facts.add(
+                                name=key,
+                                value=di[key]
                             )
 
-                    for kind, path in [
-                            ('rsa', '/etc/ssh/ssh_host_rsa_key.pub'),
-                            ('ecdsa',  '/etc/ssh/ssh_host_ecdsa_key.pub'),
-                            ('ed25519', '/etc/ssh/ssh_host_ed25519_key.pub')
-                    ]:
-                        if os.path.exists(path):
-                            with open(path) as f:
-                                gather_facts_reply.ssh_host_keys.add(
-                                    name=kind,
-                                    value=f.read()
+                        # We should allow this agent to at least run on MacOS
+                        if di['id'] != 'darwin':
+                            for entry in find_mounted_filesystems():
+                                gather_facts_reply.mount_points.add(
+                                    device=entry.device,
+                                    mount_point=entry.mount_point,
+                                    vfs_type=entry.vfs_type
                                 )
 
-                    response = agent_pb2.AgentReplyCommand(
-                        command_id=request.command_id,
-                        gather_facts_reply=gather_facts_reply
-                    )
+                        for kind, path in [
+                                ('rsa', '/etc/ssh/ssh_host_rsa_key.pub'),
+                                ('ecdsa',  '/etc/ssh/ssh_host_ecdsa_key.pub'),
+                                ('ed25519', '/etc/ssh/ssh_host_ed25519_key.pub')
+                        ]:
+                            if os.path.exists(path):
+                                with open(path) as f:
+                                    gather_facts_reply.ssh_host_keys.add(
+                                        name=kind,
+                                        value=f.read()
+                                    )
 
-                elif request.HasField('hypervisor_departure'):
-                    LOG.debug('...hypervisor departure')
-                    return
+                        responses.append(
+                            agent_pb2.AgentReplyCommand(
+                                command_id=request.command_id,
+                                gather_facts_reply=gather_facts_reply
+                            )
+                        )
 
-                else:
-                    LOG.debug('...unknown command')
-                    response = agent_pb2.AgentReplyCommand(
-                        command_id=request.command_id,
-                        unknown_command=agent_pb2.UnknownCommand()
-                    )
+                    elif request.HasField('hypervisor_departure'):
+                        LOG.debug('...hypervisor departure')
+                        return
 
-                if response:
-                    self.conn.sendall(response.SerializeToString())
+                    else:
+                        LOG.debug('...unknown command')
+                        responses.append(
+                            agent_pb2.AgentReplyCommand(
+                                command_id=request.command_id,
+                                unknown_command=agent_pb2.UnknownCommand()
+                            )
+                        )
+
+                    if responses:
+                        self._send_responses(responses)
 
         except Exception as e:
             LOG.warning(f'...command error: {e}')
-            self.conn.sendall(
-                agent_pb2.AgentReplyCommand(
-                    command_id=request.command_id,
-                    command_error=agent_pb2.CommandError(
-                        error=e
+            self._send_responses(
+                [
+                    agent_pb2.AgentReplyCommand(
+                        command_id=request.command_id,
+                        command_error=agent_pb2.CommandError(
+                            error=e
+                        )
                     )
-                )
+                ]
             )
 
         self.conn.close()
