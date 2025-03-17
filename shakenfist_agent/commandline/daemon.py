@@ -13,6 +13,7 @@ import shutil
 import signal
 import socket
 import struct
+import sys
 import symbolicmode
 import time
 import threading
@@ -21,6 +22,7 @@ from shakenfist_utilities import logs
 from shakenfist_utilities import random as sf_random
 
 from shakenfist_agent import protocol
+from shakenfist_agent.protos import agent_pb2
 
 
 SIDE_CHANNEL_PATH = '/dev/virtio-ports/sf-agent'
@@ -62,16 +64,137 @@ class VSockAgentJob(AgentJob):
         super().__init__(logger)
         self.conn = conn
 
-    def run(self):
-        while True:
-            buf = self.conn.recv(1024)
-            click.echo(f' in: {buf}')
-            if not buf:
-                click.echo('Nothing received, exiting')
-                break
+    def _send_responses(self, commands):
+        out = agent_pb2.AgentReply()
+        for cmd in commands:
+            out.commands.append(cmd)
+        self.conn.sendall(out.SerializeToString())
 
-            click.echo(f'out: {buf}')
-            self.conn.sendall(buf)
+    def run(self):
+        try:
+            buffered = bytearray()
+            while True:
+                input = self.conn.recv(102400)
+                if not input:
+                    break
+
+                buffered += input
+
+                envelope = agent_pb2.AgentRequest()
+                consumed = envelope.ParseFromString(buffered)
+                if consumed == 0:
+                    continue
+                buffered = buffered[consumed:]
+
+                responses = []
+                for request in envelope.commands:
+                    if request.HasField('hypervisor_welcome'):
+                        LOG.debug('...hypervisor welcome')
+                        version_string = VersionInfo(
+                            'shakenfist_agent').version_string()
+                        responses.append(
+                            agent_pb2.AgentReplyCommand(
+                                command_id=request.command_id,
+                                agent_welcome=agent_pb2.AgentWelcome(
+                                    version=f'version {version_string}',
+                                    boot_time=psutil.boot_time()
+                                )
+                            )
+                        )
+
+                    elif request.HasField('ping_request'):
+                        LOG.debug('...ping')
+                        responses.append(
+                            agent_pb2.AgentReplyCommand(
+                                command_id=request.command_id,
+                                ping_reply=agent_pb2.PingReply()
+                            )
+                        )
+
+                    elif request.HasField('is_system_running_request'):
+                        LOG.debug('...is system running')
+                        out, _ = processutils.execute(
+                            'systemctl is-system-running', shell=True,
+                            check_exit_code=False)
+                        out = out.rstrip()
+                        responses.append(
+                            agent_pb2.AgentReplyCommand(
+                                command_id=request.command_id,
+                                is_system_running_reply=agent_pb2.IsSystemRunningReply(
+                                    result=out == 'running',
+                                    message=out,
+                                    boot_time=psutil.boot_time()
+                                )
+                            )
+                        )
+
+                    elif request.HasField('gather_facts_request'):
+                        LOG.debug('...gather facts')
+                        gather_facts_reply = agent_pb2.GatherFactsReply()
+
+                        di = distro.info()
+                        for key in di:
+                            gather_facts_reply.distro_facts.add(
+                                name=key,
+                                value=di[key]
+                            )
+
+                        # We should allow this agent to at least run on MacOS
+                        if di['id'] != 'darwin':
+                            for entry in find_mounted_filesystems():
+                                gather_facts_reply.mount_points.add(
+                                    device=entry.device,
+                                    mount_point=entry.mount_point,
+                                    vfs_type=entry.vfs_type
+                                )
+
+                        for kind, path in [
+                                ('rsa', '/etc/ssh/ssh_host_rsa_key.pub'),
+                                ('ecdsa',  '/etc/ssh/ssh_host_ecdsa_key.pub'),
+                                ('ed25519', '/etc/ssh/ssh_host_ed25519_key.pub')
+                        ]:
+                            if os.path.exists(path):
+                                with open(path) as f:
+                                    gather_facts_reply.ssh_host_keys.add(
+                                        name=kind,
+                                        value=f.read()
+                                    )
+
+                        responses.append(
+                            agent_pb2.AgentReplyCommand(
+                                command_id=request.command_id,
+                                gather_facts_reply=gather_facts_reply
+                            )
+                        )
+
+                    elif request.HasField('hypervisor_departure'):
+                        LOG.debug('...hypervisor departure')
+                        return
+
+                    else:
+                        LOG.debug('...unknown command')
+                        responses.append(
+                            agent_pb2.AgentReplyCommand(
+                                command_id=request.command_id,
+                                unknown_command=agent_pb2.UnknownCommand()
+                            )
+                        )
+
+                    if responses:
+                        self._send_responses(responses)
+
+        except Exception as e:
+            LOG.warning(f'...command error: {e}')
+            self._send_responses(
+                [
+                    agent_pb2.AgentReplyCommand(
+                        command_id=request.command_id,
+                        command_error=agent_pb2.CommandError(
+                            error=e
+                        )
+                    )
+                ]
+            )
 
         self.conn.close()
 
@@ -328,6 +451,9 @@ def daemon_run(ctx):
     v1_thread.start()
 
     # Start listening for v2 connections on the vsock.
+    if not os.path.exists('/dev/vsock'):
+        click.echo('No /dev/vsock')
+        sys.exit(1)
 
     # Lookup our CID. This is a 32 bit unsigned int returned from an ioctl
     # against /dev/vsock. As best as I can tell the empty string argument
