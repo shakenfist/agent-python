@@ -2,6 +2,7 @@ import base64
 import click
 import distro
 import fcntl
+import json
 from linux_utils.fstab import find_mounted_filesystems
 import multiprocessing
 import os
@@ -132,19 +133,17 @@ class VSockAgentJob(AgentJob):
 
         di = distro.info()
         for key in di:
-            gather_facts_reply.distro_facts.add(
-                name=key,
-                value=di[key]
-            )
+            f = gather_facts_reply.distro_facts.add()
+            f.name = key
+            f.value = json.dumps(di[key])
 
         # We should allow this agent to at least run on MacOS
         if di['id'] != 'darwin':
             for entry in find_mounted_filesystems():
-                gather_facts_reply.mount_points.add(
-                    device=entry.device,
-                    mount_point=entry.mount_point,
-                    vfs_type=entry.vfs_type
-                )
+                mp = gather_facts_reply.mount_points.add()
+                mp.device = entry.device
+                mp.mount_point = entry.mount_point
+                mp.vfs_type = entry.vfs_type
 
         for kind, path in [
                 ('rsa', '/etc/ssh/ssh_host_rsa_key.pub'),
@@ -153,10 +152,9 @@ class VSockAgentJob(AgentJob):
         ]:
             if os.path.exists(path):
                 with open(path) as f:
-                    gather_facts_reply.ssh_host_keys.add(
-                        name=kind,
-                        value=f.read()
-                    )
+                    hk = gather_facts_reply.ssh_host_keys.add()
+                    hk.name = kind
+                    hk.value = f.read()
 
         self._send_responses(
             [
@@ -269,9 +267,7 @@ class VSockAgentJob(AgentJob):
                 [
                     agent_pb2.AgentReplyCommand(
                         command_id=request.command_id,
-                        command_error=agent_pb2.CommandError(
-                            error=e
-                        )
+                        command_error=agent_pb2.CommandError(error=str(e))
                     )
                 ]
             )
