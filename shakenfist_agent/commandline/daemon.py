@@ -168,12 +168,13 @@ class VSockAgentJob(AgentJob):
     def _handle_execute(self, request):
         global IO_PRIORITIES
 
-        command = request.command
-        if request.network_namespace != '':
-            command = f'ip netns exec {request.network_namespace} {command}'
+        execute_request = request.execute_request
+        command = execute_request.command
+        if execute_request.network_namespace != '':
+            command = f'ip netns exec {execute_request.network_namespace} {command}'
 
         env_variables = {}
-        for env_var in request.environment_variables:
+        for env_var in execute_request.environment_variables:
             env_variables[env_var.name] = env_var.value
         if not env_variables:
             env_variables = None
@@ -181,15 +182,15 @@ class VSockAgentJob(AgentJob):
         ioclass, iovalue = list(psutil.Process().ionice())
         current_iopriority = (int(ioclass), int(iovalue))
         requested_iopriority = IO_PRIORITIES.get(
-            request.io_priority, IO_PRIORITIES[common_pb2.ExecuteRequest.NORMAL])
+            execute_request.io_priority, IO_PRIORITIES[common_pb2.ExecuteRequest.NORMAL])
 
         if current_iopriority != requested_iopriority:
             command = (f'ionice -c {requested_iopriority[0]} '
                        f'-n {requested_iopriority[1]} {command}')
 
         working_directory = None
-        if request.working_directory != '':
-            working_directory = request.working_directory
+        if execute_request.working_directory != '':
+            working_directory = execute_request.working_directory
 
         start_time = time.time()
         pipe = subprocess.PIPE
@@ -203,13 +204,16 @@ class VSockAgentJob(AgentJob):
 
         self._send_responses(
             [
-                common_pb2.ExecuteReply(
-                    stdout=stdout,
-                    stderr=stderr,
-                    exit_code=obj.returncode,
-                    request_id=request.request_id,
-                    execution_id=request.execution_id,
-                    execution_seconds=round(time.time() - start_time, 2)
+                agent_pb2.AgentReplyCommand(
+                    command_id=request.command_id,
+                    execute_reply=common_pb2.ExecuteReply(
+                        stdout=stdout,
+                        stderr=stderr,
+                        exit_code=obj.returncode,
+                        request_id=execute_request.request_id,
+                        execution_id=execute_request.execution_id,
+                        execution_seconds=round(time.time() - start_time, 2)
+                    )
                 )
             ]
         )
