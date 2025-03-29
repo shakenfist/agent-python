@@ -69,10 +69,30 @@ class SerialAgentJob(AgentJob):
             CHANNEL.reap_processes()
 
 
+class _ChunkConsumer:
+    def __init__(self, command_id, path, mode):
+        self.command_id = command_id
+        self.path = path
+        self.mode = mode
+
+        self.offset = 0
+        self.file = open(path, 'wb')
+
+    def write(self, d):
+        self.file.write(d)
+
+    def close(self):
+        self.file.close()
+        if self.mode:
+            symbolicmode.chmod(self.path, self.mode)
+
+
 class VSockAgentJob(AgentJob):
     def __init__(self, logger, conn):
         super().__init__(logger)
         self.conn = conn
+
+        self.consumer = None
 
     def _send_responses(self, responses):
         out = agent_pb2.AgentReply()
@@ -218,6 +238,49 @@ class VSockAgentJob(AgentJob):
             ]
         )
 
+    def _handle_put_file(self, request):
+        put_file_request = request.put_file_request
+        self.consumer = _ChunkConsumer(
+            request.command_id, put_file_request.path, put_file_request.mode)
+        self._handle_file_chunk(put_file_request.first_chunk)
+
+    def _handle_file_chunk(self, chunk):
+        command_id = self.consumer.command_id
+        path = self.consumer.path
+
+        if len(chunk.payload) == 0:
+            # End of file
+            self.consumer.close()
+            self.consumer = None
+
+        else:
+            if chunk.encoding == agent_pb2.FileChunk.BASE64:
+                d = base64.b64decode(chunk.payload)
+                self.consumer.write(d)
+            else:
+                self._send_responses(
+                    [
+                        agent_pb2.AgentReplyCommand(
+                            command_id=command_id,
+                            command_error=agent_pb2.CommandError(
+                                error='unknown payload encoding')
+                        )
+                    ]
+                )
+                return
+
+        self._send_responses(
+            [
+                agent_pb2.AgentReplyCommand(
+                    command_id=command_id,
+                    file_chunk_reply=agent_pb2.FileChunkReply(
+                        path=path,
+                        offset=chunk.offset
+                    )
+                )
+            ]
+        )
+
     def run(self):
         try:
             buffered = bytearray()
@@ -250,6 +313,12 @@ class VSockAgentJob(AgentJob):
                     elif request.HasField('execute_request'):
                         self._handle_execute(request)
 
+                    elif request.HasField('put_file_request'):
+                        self._handle_put_file(request)
+
+                    elif request.HasField('file_chunk'):
+                        self._handle_file_chunk(request.file_chunk)
+
                     elif request.HasField('hypervisor_departure'):
                         LOG.debug('...hypervisor departure')
                         return
@@ -264,6 +333,9 @@ class VSockAgentJob(AgentJob):
                                 )
                             ]
                         )
+
+        except BrokenPipeError as e:
+            LOG.warning(f'...broken pipe: {e}')
 
         except Exception as e:
             LOG.warning(f'...command error: {e}')
