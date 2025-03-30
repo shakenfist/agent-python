@@ -186,8 +186,6 @@ class VSockAgentJob(AgentJob):
         )
 
     def _handle_execute(self, request):
-        global IO_PRIORITIES
-
         execute_request = request.execute_request
         command = execute_request.command
         if execute_request.network_namespace != '':
@@ -281,6 +279,19 @@ class VSockAgentJob(AgentJob):
             ]
         )
 
+    def _handle_chmod(self, request):
+        symbolicmode.chmod(request.path, request.mode)
+        self._send_responses(
+            [
+                agent_pb2.AgentReplyCommand(
+                    command_id=request.command_id,
+                    file_chunk_reply=agent_pb2.ChmodReply(
+                        path=request.path
+                    )
+                )
+            ]
+        )
+
     def run(self):
         try:
             buffered = bytearray()
@@ -318,6 +329,9 @@ class VSockAgentJob(AgentJob):
 
                     elif request.HasField('file_chunk'):
                         self._handle_file_chunk(request.file_chunk)
+
+                    elif request.HasField('chmod_request'):
+                        self._handle_chmod(request.chmod_request)
 
                     elif request.HasField('hypervisor_departure'):
                         LOG.debug('...hypervisor departure')
@@ -583,7 +597,6 @@ CHANNEL = None
 
 
 def exit_gracefully(sig, _frame):
-    global EXIT
     if sig == signal.SIGTERM:
         click.echo('Received SIGTERM')
         EXIT.set()
@@ -592,9 +605,6 @@ def exit_gracefully(sig, _frame):
 @daemon.command(name='run', help='Run the sf-agent daemon')
 @click.pass_context
 def daemon_run(ctx):
-    global CHANNEL
-    global EXIT
-
     signal.signal(signal.SIGTERM, exit_gracefully)
 
     # Start the v1 thread
