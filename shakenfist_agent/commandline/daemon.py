@@ -280,13 +280,14 @@ class VSockAgentJob(AgentJob):
         )
 
     def _handle_chmod(self, request):
-        symbolicmode.chmod(request.path, request.mode)
+        chmod_request = request.chmod_request
+        symbolicmode.chmod(chmod_request.path, chmod_request.mode)
         self._send_responses(
             [
                 agent_pb2.AgentReplyCommand(
                     command_id=request.command_id,
-                    file_chunk_reply=agent_pb2.ChmodReply(
-                        path=request.path
+                    chmod_reply=agent_pb2.ChmodReply(
+                        path=chmod_request.path
                     )
                 )
             ]
@@ -331,7 +332,7 @@ class VSockAgentJob(AgentJob):
                         self._handle_file_chunk(request.file_chunk)
 
                     elif request.HasField('chmod_request'):
-                        self._handle_chmod(request.chmod_request)
+                        self._handle_chmod(request)
 
                     elif request.HasField('hypervisor_departure'):
                         LOG.debug('...hypervisor departure')
