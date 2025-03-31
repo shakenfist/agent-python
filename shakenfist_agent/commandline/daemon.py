@@ -19,6 +19,7 @@ import symbolicmode
 import time
 import threading
 
+from google.protobuf.message import DecodeError
 from shakenfist_utilities import logs
 from shakenfist_utilities import random as sf_random
 
@@ -48,7 +49,7 @@ def daemon():
 
 class AgentJob:
     def __init__(self, logger):
-        self.logger = logger
+        self.log = logger
 
 
 class SerialAgentJob(AgentJob):
@@ -59,7 +60,7 @@ class SerialAgentJob(AgentJob):
             while not os.path.exists(SIDE_CHANNEL_PATH):
                 time.sleep(60)
 
-        CHANNEL = SFCharacterDeviceAgent(SIDE_CHANNEL_PATH, logger=self.logger)
+        CHANNEL = SFCharacterDeviceAgent(SIDE_CHANNEL_PATH, logger=self.log)
         CHANNEL.send_ping()
 
         while True:
@@ -304,7 +305,13 @@ class VSockAgentJob(AgentJob):
                 buffered += input
 
                 envelope = agent_pb2.AgentRequest()
-                consumed = envelope.ParseFromString(buffered)
+                envelope = agent_pb2.AgentReply()
+                try:
+                    consumed = envelope.ParseFromString(buffered)
+                except DecodeError as e:
+                    self.log.debug(f'Decode error: {e}')
+                    consumed = 0
+
                 if consumed == 0:
                     continue
                 buffered = buffered[consumed:]
@@ -368,7 +375,7 @@ class VSockAgentJob(AgentJob):
 
 class SFCharacterDeviceAgent(protocol.CharacterDeviceAgent):
     def __init__(self, path, logger=None):
-        super(SFCharacterDeviceAgent, self).__init__(path, logger=logger)
+        super().__init__(path, logger=logger)
 
         self.watched_files = {}
         self.executing_commands = []
