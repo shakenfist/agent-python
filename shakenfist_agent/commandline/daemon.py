@@ -295,6 +295,7 @@ class VSockAgentJob(AgentJob):
         )
 
     def run(self):
+        envelope = None
         try:
             buffered = bytearray()
             while True:
@@ -305,7 +306,6 @@ class VSockAgentJob(AgentJob):
                 buffered += input
 
                 envelope = agent_pb2.AgentRequest()
-                envelope = agent_pb2.AgentReply()
                 try:
                     consumed = envelope.ParseFromString(buffered)
                 except DecodeError as e:
@@ -351,7 +351,9 @@ class VSockAgentJob(AgentJob):
                             [
                                 agent_pb2.AgentReplyCommand(
                                     command_id=request.command_id,
-                                    unknown_command=agent_pb2.UnknownCommand()
+                                    unknown_command=agent_pb2.UnknownCommand(
+                                        last_envelope=envelope
+                                    )
                                 )
                             ]
                         )
@@ -365,7 +367,10 @@ class VSockAgentJob(AgentJob):
                 [
                     agent_pb2.AgentReplyCommand(
                         command_id=request.command_id,
-                        command_error=agent_pb2.CommandError(error=str(e))
+                        command_error=agent_pb2.CommandError(
+                            last_envelope=envelope,
+                            error=str(e)
+                        )
                     )
                 ]
             )
