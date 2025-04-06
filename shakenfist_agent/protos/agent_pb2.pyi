@@ -149,6 +149,26 @@ class GetFileRequest(_message.Message):
     path: str
     def __init__(self, path: _Optional[str] = ...) -> None: ...
 
+class StatResult(_message.Message):
+    __slots__ = ("path", "mode", "size", "uid", "gid", "atime", "mtime", "ctime")
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    MODE_FIELD_NUMBER: _ClassVar[int]
+    SIZE_FIELD_NUMBER: _ClassVar[int]
+    UID_FIELD_NUMBER: _ClassVar[int]
+    GID_FIELD_NUMBER: _ClassVar[int]
+    ATIME_FIELD_NUMBER: _ClassVar[int]
+    MTIME_FIELD_NUMBER: _ClassVar[int]
+    CTIME_FIELD_NUMBER: _ClassVar[int]
+    path: str
+    mode: int
+    size: int
+    uid: int
+    gid: int
+    atime: float
+    mtime: float
+    ctime: float
+    def __init__(self, path: _Optional[str] = ..., mode: _Optional[int] = ..., size: _Optional[int] = ..., uid: _Optional[int] = ..., gid: _Optional[int] = ..., atime: _Optional[float] = ..., mtime: _Optional[float] = ..., ctime: _Optional[float] = ...) -> None: ...
+
 class CommandError(_message.Message):
     __slots__ = ("error", "last_envelope")
     ERROR_FIELD_NUMBER: _ClassVar[int]
@@ -202,7 +222,7 @@ class AgentRequest(_message.Message):
     def __init__(self, commands: _Optional[_Iterable[_Union[AgentRequestCommand, _Mapping]]] = ...) -> None: ...
 
 class AgentReplyCommand(_message.Message):
-    __slots__ = ("command_id", "agent_welcome", "command_error", "unknown_command", "ping_reply", "execute_reply", "is_system_running_reply", "gather_facts_reply", "file_chunk_reply", "chmod_reply", "chown_reply", "file_chunk")
+    __slots__ = ("command_id", "agent_welcome", "command_error", "unknown_command", "ping_reply", "execute_reply", "is_system_running_reply", "gather_facts_reply", "file_chunk_reply", "chmod_reply", "chown_reply", "file_chunk", "stat_result")
     COMMAND_ID_FIELD_NUMBER: _ClassVar[int]
     AGENT_WELCOME_FIELD_NUMBER: _ClassVar[int]
     COMMAND_ERROR_FIELD_NUMBER: _ClassVar[int]
@@ -215,6 +235,7 @@ class AgentReplyCommand(_message.Message):
     CHMOD_REPLY_FIELD_NUMBER: _ClassVar[int]
     CHOWN_REPLY_FIELD_NUMBER: _ClassVar[int]
     FILE_CHUNK_FIELD_NUMBER: _ClassVar[int]
+    STAT_RESULT_FIELD_NUMBER: _ClassVar[int]
     command_id: str
     agent_welcome: AgentWelcome
     command_error: CommandError
@@ -227,7 +248,8 @@ class AgentReplyCommand(_message.Message):
     chmod_reply: ChmodReply
     chown_reply: ChownReply
     file_chunk: FileChunk
-    def __init__(self, command_id: _Optional[str] = ..., agent_welcome: _Optional[_Union[AgentWelcome, _Mapping]] = ..., command_error: _Optional[_Union[CommandError, _Mapping]] = ..., unknown_command: _Optional[_Union[UnknownCommand, _Mapping]] = ..., ping_reply: _Optional[_Union[PingReply, _Mapping]] = ..., execute_reply: _Optional[_Union[_common_pb2.ExecuteReply, _Mapping]] = ..., is_system_running_reply: _Optional[_Union[IsSystemRunningReply, _Mapping]] = ..., gather_facts_reply: _Optional[_Union[GatherFactsReply, _Mapping]] = ..., file_chunk_reply: _Optional[_Union[FileChunkReply, _Mapping]] = ..., chmod_reply: _Optional[_Union[ChmodReply, _Mapping]] = ..., chown_reply: _Optional[_Union[ChownReply, _Mapping]] = ..., file_chunk: _Optional[_Union[FileChunk, _Mapping]] = ...) -> None: ...
+    stat_result: StatResult
+    def __init__(self, command_id: _Optional[str] = ..., agent_welcome: _Optional[_Union[AgentWelcome, _Mapping]] = ..., command_error: _Optional[_Union[CommandError, _Mapping]] = ..., unknown_command: _Optional[_Union[UnknownCommand, _Mapping]] = ..., ping_reply: _Optional[_Union[PingReply, _Mapping]] = ..., execute_reply: _Optional[_Union[_common_pb2.ExecuteReply, _Mapping]] = ..., is_system_running_reply: _Optional[_Union[IsSystemRunningReply, _Mapping]] = ..., gather_facts_reply: _Optional[_Union[GatherFactsReply, _Mapping]] = ..., file_chunk_reply: _Optional[_Union[FileChunkReply, _Mapping]] = ..., chmod_reply: _Optional[_Union[ChmodReply, _Mapping]] = ..., chown_reply: _Optional[_Union[ChownReply, _Mapping]] = ..., file_chunk: _Optional[_Union[FileChunk, _Mapping]] = ..., stat_result: _Optional[_Union[StatResult, _Mapping]] = ...) -> None: ...
 
 class AgentReply(_message.Message):
     __slots__ = ("commands",)

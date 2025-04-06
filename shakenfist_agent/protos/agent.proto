@@ -97,6 +97,17 @@ message GetFileRequest {
     string path = 1;
 }
 
+message StatResult {
+    string path = 1;
+    int64 mode = 2;
+    int64 size = 3;
+    int64 uid = 4;
+    int64 gid = 5;
+    double atime = 6;
+    double mtime = 7;
+    double ctime = 8;
+}
+
 // Protocol level errors
 message CommandError {
     string error = 1;
@@ -153,6 +164,7 @@ message AgentReplyCommand {
         ChmodReply chmod_reply = 44;
         ChownReply chown_reply = 45;
         FileChunk file_chunk = 46;
+        StatResult stat_result = 47;
     }
 }
 

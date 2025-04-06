@@ -30,6 +30,7 @@ from shakenfist_agent.protos import common_pb2
 
 SIDE_CHANNEL_PATH = '/dev/virtio-ports/sf-agent'
 VSOCK_PORT = 1025
+MAX_CHUNK_SIZE = 102400
 EXIT = threading.Event()
 LOG = logs.setup_console(__name__)
 
@@ -294,6 +295,70 @@ class VSockAgentJob(AgentJob):
             ]
         )
 
+    def _handle_get_file(self, request):
+        get_request = request.get_file_request
+        if not os.path.exists(get_request.path):
+            self._send_responses(
+                [
+                    agent_pb2.AgentReplyCommand(
+                        command_id=request.command_id,
+                        command_error=agent_pb2.CommandError(
+                            error='file not found')
+                    )
+                ]
+            )
+            return
+
+        with open(get_request.path, 'rb') as f:
+            st = os.stat(get_request.path)
+            self._send_responses(
+                [
+                    agent_pb2.AgentReplyCommand(
+                        command_id=request.command_id,
+                        stat_result=agent_pb2.StatResult(
+                            mode=st.st_mode,
+                            size=st.st_size,
+                            uid=st.st_uid,
+                            gid=st.st_gid,
+                            atime=st.st_atime,
+                            mtime=st.st_mtime,
+                            ctime=st.st_ctime,
+                        )
+                    )
+                ]
+            )
+
+            offset = 0
+            while d := f.read(MAX_CHUNK_SIZE):
+                self._send_responses(
+                    [
+                        agent_pb2.AgentReplyCommand(
+                            command_id=request.command_id,
+                            file_chunk=agent_pb2.FileChunk(
+                                path=get_request.path,
+                                offset=offset,
+                                encoding=agent_pb2.FileChunk.BASE64,
+                                payload=base64.b64encode(d)
+                            )
+                        )
+                    ]
+                )
+                offset += len(d)
+
+            self._send_responses(
+                [
+                    agent_pb2.AgentReplyCommand(
+                        command_id=request.command_id,
+                        file_chunk=agent_pb2.FileChunk(
+                            path=get_request.path,
+                            offset=offset,
+                            encoding=agent_pb2.FileChunk.BASE64,
+                            payload=None
+                        )
+                    )
+                ]
+            )
+
     def run(self):
         envelope = None
         try:
@@ -344,6 +409,9 @@ class VSockAgentJob(AgentJob):
                     elif request.HasField('hypervisor_departure'):
                         LOG.debug('...hypervisor departure')
                         return
+
+                    elif request.HasFiled('get_file_request'):
+                        self._handle_get_file(request)
 
                     else:
                         LOG.debug('...unknown command')
