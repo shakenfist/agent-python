@@ -335,7 +335,6 @@ class VSockAgentJob(AgentJob):
                         agent_pb2.AgentReplyCommand(
                             command_id=request.command_id,
                             file_chunk=agent_pb2.FileChunk(
-                                path=get_request.path,
                                 offset=offset,
                                 encoding=agent_pb2.FileChunk.BASE64,
                                 payload=base64.b64encode(d)
@@ -350,7 +349,6 @@ class VSockAgentJob(AgentJob):
                     agent_pb2.AgentReplyCommand(
                         command_id=request.command_id,
                         file_chunk=agent_pb2.FileChunk(
-                            path=get_request.path,
                             offset=offset,
                             encoding=agent_pb2.FileChunk.BASE64,
                             payload=None
@@ -410,7 +408,7 @@ class VSockAgentJob(AgentJob):
                         LOG.debug('...hypervisor departure')
                         return
 
-                    elif request.HasFiled('get_file_request'):
+                    elif request.HasField('get_file_request'):
                         self._handle_get_file(request)
 
                     else:
