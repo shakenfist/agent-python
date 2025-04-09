@@ -20,7 +20,6 @@ import time
 import threading
 
 from google.protobuf.message import DecodeError
-from shakenfist_utilities import logs
 from shakenfist_utilities import random as sf_random
 
 from shakenfist_agent import protocol
@@ -32,7 +31,6 @@ SIDE_CHANNEL_PATH = '/dev/virtio-ports/sf-agent'
 VSOCK_PORT = 1025
 MAX_CHUNK_SIZE = 102400
 EXIT = threading.Event()
-LOG = logs.setup_console(__name__)
 
 
 # Mid-range best effort, equivalent to not specifying a value
@@ -103,7 +101,7 @@ class VSockAgentJob(AgentJob):
         self.conn.sendall(out.SerializeToString())
 
     def _handle_hypervisor_welcome(self, request):
-        LOG.debug('...hypervisor welcome')
+        self.log.debug('...hypervisor welcome')
         version_string = VersionInfo('shakenfist_agent').version_string()
         self._send_responses(
             [
@@ -118,7 +116,7 @@ class VSockAgentJob(AgentJob):
         )
 
     def _handle_ping(self, request):
-        LOG.debug('...ping')
+        self.log.debug('...ping')
         self._send_responses(
             [
                 agent_pb2.AgentReplyCommand(
@@ -129,13 +127,13 @@ class VSockAgentJob(AgentJob):
         )
 
     def _handle_is_system_running(self, request):
-        LOG.debug('...is system running')
+        self.log.debug('...is system running')
         out, _ = processutils.execute(
             'systemctl is-system-running', shell=True,
             check_exit_code=False)
         out = out.rstrip()
 
-        LOG.debug('...ping')
+        self.log.debug('...ping')
         self._send_responses(
             [
                 agent_pb2.AgentReplyCommand(
@@ -150,7 +148,7 @@ class VSockAgentJob(AgentJob):
         )
 
     def _handle_gather_facts(self, request):
-        LOG.debug('...gather facts')
+        self.log.debug('...gather facts')
         gather_facts_reply = agent_pb2.GatherFactsReply()
 
         di = distro.info()
@@ -405,14 +403,14 @@ class VSockAgentJob(AgentJob):
                         self._handle_chmod(request)
 
                     elif request.HasField('hypervisor_departure'):
-                        LOG.debug('...hypervisor departure')
+                        self.log.debug('...hypervisor departure')
                         return
 
                     elif request.HasField('get_file_request'):
                         self._handle_get_file(request)
 
                     else:
-                        LOG.debug('...unknown command')
+                        self.log.debug('...unknown command')
                         self._send_responses(
                             [
                                 agent_pb2.AgentReplyCommand(
@@ -425,10 +423,10 @@ class VSockAgentJob(AgentJob):
                         )
 
         except BrokenPipeError as e:
-            LOG.warning(f'...broken pipe: {e}')
+            self.log.warning(f'...broken pipe: {e}')
 
         except Exception as e:
-            LOG.warning(f'...command error: {e}')
+            self.log.warning(f'...command error: {e}')
             self._send_responses(
                 [
                     agent_pb2.AgentReplyCommand(
@@ -724,7 +722,7 @@ def daemon_run(ctx):
 
         if conn:
             thread_name = sf_random.random_id()
-            log = LOG.with_fields({
+            log = ctx.obj['LOGGER'].with_fields({
                 'remote_cid': remote_cid,
                 'remote_port': remote_port,
                 'thread_name': thread_name
