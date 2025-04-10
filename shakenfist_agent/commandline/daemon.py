@@ -20,6 +20,7 @@ import time
 import threading
 
 from google.protobuf.message import DecodeError
+import setproctitle
 from shakenfist_utilities import random as sf_random
 
 from shakenfist_agent import protocol
@@ -186,6 +187,7 @@ class VSockAgentJob(AgentJob):
         )
 
     def _handle_execute(self, request):
+        self.log.debug('...execute')
         execute_request = request.execute_request
         command = execute_request.command
         if execute_request.network_namespace != '':
@@ -237,12 +239,14 @@ class VSockAgentJob(AgentJob):
         )
 
     def _handle_put_file(self, request):
+        self.log.debug('...put file')
         put_file_request = request.put_file_request
         self.consumer = _ChunkConsumer(
             request.command_id, put_file_request.path, put_file_request.mode)
         self._handle_file_chunk(put_file_request.first_chunk)
 
     def _handle_file_chunk(self, chunk):
+        self.log.debug('...file chunk')
         command_id = self.consumer.command_id
         path = self.consumer.path
 
@@ -280,6 +284,7 @@ class VSockAgentJob(AgentJob):
         )
 
     def _handle_chmod(self, request):
+        self.log.debug('...chmod')
         chmod_request = request.chmod_request
         symbolicmode.chmod(chmod_request.path, chmod_request.mode)
         self._send_responses(
@@ -294,6 +299,7 @@ class VSockAgentJob(AgentJob):
         )
 
     def _handle_get_file(self, request):
+        self.log.debug('...get file')
         get_request = request.get_file_request
         if not os.path.exists(get_request.path):
             self._send_responses(
@@ -370,7 +376,6 @@ class VSockAgentJob(AgentJob):
                 try:
                     consumed = envelope.ParseFromString(buffered)
                 except DecodeError as e:
-                    self.log.debug(f'Decode error: {e}')
                     consumed = 0
 
                 if consumed == 0:
@@ -408,6 +413,9 @@ class VSockAgentJob(AgentJob):
 
                     elif request.HasField('get_file_request'):
                         self._handle_get_file(request)
+
+                    elif request.HasField('file_chunk_reply'):
+                        self.log.debug('...file chunk reply')
 
                     else:
                         self.log.debug('...unknown command')
@@ -683,6 +691,7 @@ def exit_gracefully(sig, _frame):
 @click.pass_context
 def daemon_run(ctx):
     signal.signal(signal.SIGTERM, exit_gracefully)
+    setproctitle.setproctitle('sf-agent')
 
     # Start the v1 thread
     v1 = SerialAgentJob(ctx.obj['LOGGER'])
@@ -713,7 +722,7 @@ def daemon_run(ctx):
         if s:
             try:
                 conn, (remote_cid, remote_port) = s.accept()
-                click.echo(f'Connection from {remote_cid} on with remote port '
+                click.echo(f'Connection from CID {remote_cid} with remote port '
                            f'{remote_port}')
             except socket.timeout:
                 conn = None
