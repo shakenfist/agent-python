@@ -42,6 +42,14 @@ IO_PRIORITIES = {
 }
 
 
+class NoSuchCommand(Exception):
+    ...
+
+
+class IOClassException(Exception):
+    ...
+
+
 @click.group(help='Daemon commands')
 def daemon():
     pass
@@ -93,6 +101,7 @@ class VSockAgentJob(AgentJob):
         super().__init__(logger)
         self.conn = conn
 
+        self.buffered = bytearray()
         self.consumer = None
 
     def _send_responses(self, responses):
@@ -134,7 +143,6 @@ class VSockAgentJob(AgentJob):
             check_exit_code=False)
         out = out.rstrip()
 
-        self.log.debug('...ping')
         self._send_responses(
             [
                 agent_pb2.AgentReplyCommand(
@@ -189,7 +197,10 @@ class VSockAgentJob(AgentJob):
     def _handle_execute(self, request):
         self.log.debug('...execute')
         execute_request = request.execute_request
-        command = execute_request.command
+        command = shutil.which(execute_request.command)
+        if not command:
+            raise NoSuchCommand(f'No such command: {execute_request.command}')
+
         if execute_request.network_namespace != '':
             command = f'ip netns exec {execute_request.network_namespace} {command}'
 
@@ -199,14 +210,25 @@ class VSockAgentJob(AgentJob):
         if not env_variables:
             env_variables = None
 
-        ioclass, iovalue = list(psutil.Process().ionice())
-        current_iopriority = (int(ioclass), int(iovalue))
-        requested_iopriority = IO_PRIORITIES.get(
-            execute_request.io_priority, IO_PRIORITIES[common_pb2.ExecuteRequest.NORMAL])
+        # MacOS appears to not support this ionice code. I like unit tests
+        # working on MacOS however.
+        supports_ionice = True
+        try:
+            ioclass, iovalue = list(psutil.Process().ionice())
+        except AttributeError:
+            supports_ionice = False
 
-        if current_iopriority != requested_iopriority:
-            command = (f'ionice -c {requested_iopriority[0]} '
-                       f'-n {requested_iopriority[1]} {command}')
+        if supports_ionice:
+            current_iopriority = (int(ioclass), int(iovalue))
+            requested_iopriority = IO_PRIORITIES.get(
+                execute_request.io_priority, IO_PRIORITIES[common_pb2.ExecuteRequest.NORMAL])
+
+            if current_iopriority != requested_iopriority:
+                command = (f'ionice -c {requested_iopriority[0]} '
+                           f'-n {requested_iopriority[1]} {command}')
+        elif execute_request.io_priority != common_pb2.ExecuteRequest.NORMAL:
+            raise IOClassException(
+                'Changing IO priority is not supported on this platform')
 
         working_directory = None
         if execute_request.working_directory != '':
@@ -217,7 +239,6 @@ class VSockAgentJob(AgentJob):
         obj = subprocess.Popen(
             command, stdin=pipe, stdout=pipe, stderr=pipe, close_fds=True,
             shell=True, cwd=working_directory, env=env_variables)
-        self.pid = obj.pid
 
         stdout, stderr = obj.communicate(None, timeout=None)
         obj.stdin.close()
@@ -361,74 +382,66 @@ class VSockAgentJob(AgentJob):
                 ]
             )
 
-    def run(self):
+    def _attempt_decode(self):
         envelope = None
         try:
-            buffered = bytearray()
-            while True:
-                input = self.conn.recv(102400)
-                if not input:
-                    break
+            envelope = agent_pb2.AgentRequest()
+            try:
+                consumed = envelope.ParseFromString(self.buffered)
+            except DecodeError:
+                consumed = 0
 
-                buffered += input
+            if consumed == 0:
+                return
+            self.buffered = self.buffered[consumed:]
 
-                envelope = agent_pb2.AgentRequest()
-                try:
-                    consumed = envelope.ParseFromString(buffered)
-                except DecodeError as e:
-                    consumed = 0
+            for request in envelope.commands:
+                if request.HasField('hypervisor_welcome'):
+                    self._handle_hypervisor_welcome(request)
 
-                if consumed == 0:
-                    continue
-                buffered = buffered[consumed:]
+                elif request.HasField('ping_request'):
+                    self._handle_ping(request)
 
-                for request in envelope.commands:
-                    if request.HasField('hypervisor_welcome'):
-                        self._handle_hypervisor_welcome(request)
+                elif request.HasField('is_system_running_request'):
+                    self._handle_is_system_running(request)
 
-                    elif request.HasField('ping_request'):
-                        self._handle_ping(request)
+                elif request.HasField('gather_facts_request'):
+                    self._handle_gather_facts(request)
 
-                    elif request.HasField('is_system_running_request'):
-                        self._handle_is_system_running(request)
+                elif request.HasField('execute_request'):
+                    self._handle_execute(request)
 
-                    elif request.HasField('gather_facts_request'):
-                        self._handle_gather_facts(request)
+                elif request.HasField('put_file_request'):
+                    self._handle_put_file(request)
 
-                    elif request.HasField('execute_request'):
-                        self._handle_execute(request)
+                elif request.HasField('file_chunk'):
+                    self._handle_file_chunk(request.file_chunk)
 
-                    elif request.HasField('put_file_request'):
-                        self._handle_put_file(request)
+                elif request.HasField('chmod_request'):
+                    self._handle_chmod(request)
 
-                    elif request.HasField('file_chunk'):
-                        self._handle_file_chunk(request.file_chunk)
+                elif request.HasField('hypervisor_departure'):
+                    self.log.debug('...hypervisor departure')
+                    return
 
-                    elif request.HasField('chmod_request'):
-                        self._handle_chmod(request)
+                elif request.HasField('get_file_request'):
+                    self._handle_get_file(request)
 
-                    elif request.HasField('hypervisor_departure'):
-                        self.log.debug('...hypervisor departure')
-                        return
+                elif request.HasField('file_chunk_reply'):
+                    self.log.debug('...file chunk reply')
 
-                    elif request.HasField('get_file_request'):
-                        self._handle_get_file(request)
-
-                    elif request.HasField('file_chunk_reply'):
-                        self.log.debug('...file chunk reply')
-
-                    else:
-                        self.log.debug('...unknown command')
-                        self._send_responses(
-                            [
-                                agent_pb2.AgentReplyCommand(
-                                    command_id=request.command_id,
-                                    unknown_command=agent_pb2.UnknownCommand(
-                                        last_envelope=envelope
-                                    )
+                else:
+                    self.log.debug('...unknown command')
+                    self._send_responses(
+                        [
+                            agent_pb2.AgentReplyCommand(
+                                command_id=request.command_id,
+                                unknown_command=agent_pb2.UnknownCommand(
+                                    last_envelope=envelope
                                 )
-                            ]
-                        )
+                            )
+                        ]
+                    )
 
         except BrokenPipeError as e:
             self.log.warning(f'...broken pipe: {e}')
@@ -446,6 +459,15 @@ class VSockAgentJob(AgentJob):
                     )
                 ]
             )
+
+    def run(self):
+        while True:
+            input = self.conn.recv(102400)
+            if not input:
+                break
+
+            self.buffered += input
+            self._attempt_decode()
 
         self.conn.close()
 
