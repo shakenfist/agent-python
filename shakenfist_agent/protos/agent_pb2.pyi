@@ -100,10 +100,10 @@ class PutFileRequest(_message.Message):
     LENGTH_FIELD_NUMBER: _ClassVar[int]
     FIRST_CHUNK_FIELD_NUMBER: _ClassVar[int]
     path: str
-    mode: str
+    mode: int
     length: int
     first_chunk: FileChunk
-    def __init__(self, path: _Optional[str] = ..., mode: _Optional[str] = ..., length: _Optional[int] = ..., first_chunk: _Optional[_Union[FileChunk, _Mapping]] = ...) -> None: ...
+    def __init__(self, path: _Optional[str] = ..., mode: _Optional[int] = ..., length: _Optional[int] = ..., first_chunk: _Optional[_Union[FileChunk, _Mapping]] = ...) -> None: ...
 
 class FileChunkReply(_message.Message):
     __slots__ = ("path", "offset")
@@ -174,14 +174,14 @@ class CommandError(_message.Message):
     ERROR_FIELD_NUMBER: _ClassVar[int]
     LAST_ENVELOPE_FIELD_NUMBER: _ClassVar[int]
     error: str
-    last_envelope: AgentRequestCommand
-    def __init__(self, error: _Optional[str] = ..., last_envelope: _Optional[_Union[AgentRequestCommand, _Mapping]] = ...) -> None: ...
+    last_envelope: AgentRequest
+    def __init__(self, error: _Optional[str] = ..., last_envelope: _Optional[_Union[AgentRequest, _Mapping]] = ...) -> None: ...
 
 class UnknownCommand(_message.Message):
     __slots__ = ("last_envelope",)
     LAST_ENVELOPE_FIELD_NUMBER: _ClassVar[int]
-    last_envelope: AgentRequestCommand
-    def __init__(self, last_envelope: _Optional[_Union[AgentRequestCommand, _Mapping]] = ...) -> None: ...
+    last_envelope: AgentRequest
+    def __init__(self, last_envelope: _Optional[_Union[AgentRequest, _Mapping]] = ...) -> None: ...
 
 class AgentRequestCommand(_message.Message):
     __slots__ = ("command_id", "hypervisor_welcome", "hypervisor_departure", "command_error", "unknown_command", "ping_request", "execute_request", "is_system_running_request", "gather_facts_request", "put_file_request", "file_chunk", "chmod_request", "chown_request", "get_file_request")

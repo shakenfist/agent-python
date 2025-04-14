@@ -64,7 +64,7 @@ message FileChunk {
 
 message PutFileRequest {
     string path = 1;
-    string mode = 2;
+    int32 mode = 2;
     int64 length = 3;
     FileChunk first_chunk = 4;
 }
@@ -111,11 +111,11 @@ message StatResult {
 // Protocol level errors
 message CommandError {
     string error = 1;
-    AgentRequestCommand last_envelope = 2;
+    AgentRequest last_envelope = 2;
 }
 
 message UnknownCommand {
-    AgentRequestCommand last_envelope = 1;
+    AgentRequest last_envelope = 1;
 }
 
 // Envelopes
