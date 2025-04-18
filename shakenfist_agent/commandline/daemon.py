@@ -197,9 +197,9 @@ class VSockAgentJob(AgentJob):
     def _handle_execute(self, request):
         self.log.debug('...execute')
         execute_request = request.execute_request
-        command = shutil.which(execute_request.command.split(' ')[0])
-        if not command:
-            raise NoSuchCommand(f'No such command: {execute_request.command}')
+        command = execute_request.command
+        if not shutil.which(command.split(' ')[0]):
+            raise NoSuchCommand(f'No such command: {command}')
 
         if execute_request.network_namespace != '':
             command = f'ip netns exec {execute_request.network_namespace} {command}'
