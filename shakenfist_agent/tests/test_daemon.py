@@ -140,9 +140,9 @@ class DaemonAgentV2TestCase(testtools.TestCase):
 
         # Send an invalid ExecuteRequest
         cmd_id = sf_random.random_id()
-        msg = agent_pb2.AgentRequest()
+        msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 execute_request=common_pb2.ExecuteRequest(
                     command='/bin/nosuch',
@@ -175,9 +175,9 @@ class DaemonAgentV2TestCase(testtools.TestCase):
 
         # Send a HypervisorWelcome
         cmd_id = sf_random.random_id()
-        msg = agent_pb2.AgentRequest()
+        msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 hypervisor_welcome=agent_pb2.HypervisorWelcome(
                     version='0.8'
@@ -205,9 +205,9 @@ class DaemonAgentV2TestCase(testtools.TestCase):
 
         # Send a HypervisorDeparture
         cmd_id = sf_random.random_id()
-        msg = agent_pb2.AgentRequest()
+        msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 hypervisor_departure=agent_pb2.HypervisorDeparture()
             )
@@ -226,9 +226,9 @@ class DaemonAgentV2TestCase(testtools.TestCase):
 
         # Send a PingRequest
         cmd_id = sf_random.random_id()
-        msg = agent_pb2.AgentRequest()
+        msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 ping_request=agent_pb2.PingRequest()
             )
@@ -254,9 +254,9 @@ class DaemonAgentV2TestCase(testtools.TestCase):
 
         # Send a IsSystemRunningRequest
         cmd_id = sf_random.random_id()
-        msg = agent_pb2.AgentRequest()
+        msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 is_system_running_request=agent_pb2.IsSystemRunningRequest()
             )
@@ -288,9 +288,9 @@ class DaemonAgentV2TestCase(testtools.TestCase):
 
         # Send a GatherFactsRequest
         cmd_id = sf_random.random_id()
-        msg = agent_pb2.AgentRequest()
+        msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 gather_facts_request=agent_pb2.GatherFactsRequest()
             )
@@ -316,9 +316,9 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         # Send an ExecuteRequest, this really executes the command because
         # mocking Popen is fiddly.
         cmd_id = sf_random.random_id()
-        msg = agent_pb2.AgentRequest()
+        msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 execute_request=common_pb2.ExecuteRequest(
                     command='whoami',
@@ -347,9 +347,9 @@ class DaemonAgentV2TestCase(testtools.TestCase):
 
         # Send a PutFileRequest, and then a series of FileChunks
         cmd_id = sf_random.random_id()
-        msg = agent_pb2.AgentRequest()
+        msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 put_file_request=agent_pb2.PutFileRequest(
                     path=f'/tmp/put-file-test-{os.getpid()}',
@@ -365,7 +365,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
             )
         )
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 file_chunk=agent_pb2.FileChunk(
                     offset=3,
@@ -375,7 +375,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
             )
         )
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 file_chunk=agent_pb2.FileChunk(
                     offset=6,
@@ -385,7 +385,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
             )
         )
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 file_chunk=agent_pb2.FileChunk(
                     offset=9,
@@ -420,9 +420,9 @@ class DaemonAgentV2TestCase(testtools.TestCase):
 
         # Send a ChmodRequest
         cmd_id = sf_random.random_id()
-        msg = agent_pb2.AgentRequest()
+        msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
-            agent_pb2.AgentRequestCommand(
+            agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 chmod_request=agent_pb2.ChmodRequest(
                     path='/a/random/path',
@@ -459,9 +459,9 @@ class DaemonAgentV2TestCase(testtools.TestCase):
 
             # Send a GetFileRequest
             cmd_id = sf_random.random_id()
-            msg = agent_pb2.AgentRequest()
+            msg = agent_pb2.HypervisorToAgent()
             msg.commands.append(
-                agent_pb2.AgentRequestCommand(
+                agent_pb2.HypervisorToAgentCommand(
                     command_id=cmd_id,
                     get_file_request=agent_pb2.GetFileRequest(
                         path=tmp
@@ -488,6 +488,19 @@ class DaemonAgentV2TestCase(testtools.TestCase):
                 self.assertEqual(
                     agent_pb2.FileChunk.BASE64, env[0].file_chunk.encoding)
                 self.assertNotEqual('', env[0].file_chunk.payload)
+
+                # Ack the FileChunk
+                cmd_id = sf_random.random_id()
+                msg = agent_pb2.HypervisorToAgent()
+                msg.commands.append(
+                    agent_pb2.HypervisorToAgentCommand(
+                        command_id=cmd_id,
+                        file_chunk_reply=agent_pb2.FileChunkReply(
+                            path=tmp,
+                            offset=env[0].file_chunk.offset
+                        )
+                    )
+                )
 
             env = mock_send_responses.call_args_list[12].args[0]
             self.assertEqual(1, len(env), f'Unexpected length: {env}')
