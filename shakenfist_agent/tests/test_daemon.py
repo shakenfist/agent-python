@@ -451,41 +451,48 @@ class DaemonAgentV2TestCase(testtools.TestCase):
     def test_get_file(self, mock_send_responses):
         d = daemon.VSockAgentJob(LOG, None)
 
-        # Send a GetFileRequest
-        cmd_id = sf_random.random_id()
-        msg = agent_pb2.AgentRequest()
-        msg.commands.append(
-            agent_pb2.AgentRequestCommand(
-                command_id=cmd_id,
-                get_file_request=agent_pb2.GetFileRequest(
-                    path='/etc/resolv.conf'
+        with tempfile.TemporaryDirectory() as td:
+            tmp = os.path.join(td, 'tempfile')
+            with open(tmp, 'w') as f:
+                for _ in range(1024):
+                    f.write('?' * 1024)
+
+            # Send a GetFileRequest
+            cmd_id = sf_random.random_id()
+            msg = agent_pb2.AgentRequest()
+            msg.commands.append(
+                agent_pb2.AgentRequestCommand(
+                    command_id=cmd_id,
+                    get_file_request=agent_pb2.GetFileRequest(
+                        path=tmp
+                    )
                 )
             )
-        )
 
-        # Let the daemon process that
-        d.buffered += msg.SerializeToString()
-        d._attempt_decode()
+            # Let the daemon process that
+            d.buffered += msg.SerializeToString()
+            d._attempt_decode()
 
-        # And make sure we replied correctly
-        self.assertEqual(3, len(mock_send_responses.mock_calls))
+            # And make sure we replied correctly
+            self.assertEqual(13, len(mock_send_responses.mock_calls))
 
-        env = mock_send_responses.call_args_list[0].args[0]
-        self.assertEqual(1, len(env), f'Unexpected length: {env}')
-        self.assertTrue(env[0].HasField('stat_result'))
+            env = mock_send_responses.call_args_list[0].args[0]
+            self.assertEqual(1, len(env), f'Unexpected length: {env}')
+            self.assertTrue(env[0].HasField('stat_result'))
 
-        env = mock_send_responses.call_args_list[1].args[0]
-        self.assertEqual(1, len(env), f'Unexpected length: {env}')
-        self.assertTrue(env[0].HasField('file_chunk'))
-        self.assertEqual(0, env[0].file_chunk.offset)
-        self.assertEqual(
-            agent_pb2.FileChunk.BASE64, env[0].file_chunk.encoding)
-        self.assertNotEqual('', env[0].file_chunk.payload)
+            for i in range(10):
+                env = mock_send_responses.call_args_list[1 + i].args[0]
+                self.assertEqual(1, len(env), f'Unexpected length: {env}')
+                self.assertTrue(env[0].HasField('file_chunk'))
+                self.assertEqual(i * 102400, env[0].file_chunk.offset)
+                self.assertEqual(
+                    agent_pb2.FileChunk.BASE64, env[0].file_chunk.encoding)
+                self.assertNotEqual('', env[0].file_chunk.payload)
 
-        env = mock_send_responses.call_args_list[2].args[0]
-        self.assertEqual(1, len(env), f'Unexpected length: {env}')
-        self.assertTrue(env[0].HasField('file_chunk'))
-        self.assertNotEqual(0, env[0].file_chunk.offset)
-        self.assertEqual(
-            agent_pb2.FileChunk.BASE64, env[0].file_chunk.encoding)
-        self.assertEqual('', env[0].file_chunk.payload)
+            env = mock_send_responses.call_args_list[12].args[0]
+            self.assertEqual(1, len(env), f'Unexpected length: {env}')
+            self.assertTrue(env[0].HasField('file_chunk'))
+            self.assertNotEqual(0, env[0].file_chunk.offset)
+            self.assertEqual(
+                agent_pb2.FileChunk.BASE64, env[0].file_chunk.encoding)
+            self.assertEqual('', env[0].file_chunk.payload)
