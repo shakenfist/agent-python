@@ -105,7 +105,7 @@ class VSockAgentJob(AgentJob):
         self.consumer = None
 
     def _send_responses(self, responses):
-        out = agent_pb2.AgentReply()
+        out = agent_pb2.AgentToHypervisor()
         for cmd in responses:
             out.commands.append(cmd)
         self.conn.sendall(out.SerializeToString())
@@ -115,7 +115,7 @@ class VSockAgentJob(AgentJob):
         version_string = VersionInfo('shakenfist_agent').version_string()
         self._send_responses(
             [
-                agent_pb2.AgentReplyCommand(
+                agent_pb2.AgentToHypervisorCommand(
                     command_id=request.command_id,
                     agent_welcome=agent_pb2.AgentWelcome(
                         version=f'version {version_string}',
@@ -129,7 +129,7 @@ class VSockAgentJob(AgentJob):
         self.log.debug('...ping')
         self._send_responses(
             [
-                agent_pb2.AgentReplyCommand(
+                agent_pb2.AgentToHypervisorCommand(
                     command_id=request.command_id,
                     ping_reply=agent_pb2.PingReply()
                 )
@@ -145,7 +145,7 @@ class VSockAgentJob(AgentJob):
 
         self._send_responses(
             [
-                agent_pb2.AgentReplyCommand(
+                agent_pb2.AgentToHypervisorCommand(
                     command_id=request.command_id,
                     is_system_running_reply=agent_pb2.IsSystemRunningReply(
                         result=out == 'running',
@@ -187,7 +187,7 @@ class VSockAgentJob(AgentJob):
 
         self._send_responses(
             [
-                agent_pb2.AgentReplyCommand(
+                agent_pb2.AgentToHypervisorCommand(
                     command_id=request.command_id,
                     gather_facts_reply=gather_facts_reply
                 )
@@ -245,7 +245,7 @@ class VSockAgentJob(AgentJob):
 
         self._send_responses(
             [
-                agent_pb2.AgentReplyCommand(
+                agent_pb2.AgentToHypervisorCommand(
                     command_id=request.command_id,
                     execute_reply=common_pb2.ExecuteReply(
                         stdout=stdout,
@@ -283,7 +283,7 @@ class VSockAgentJob(AgentJob):
             else:
                 self._send_responses(
                     [
-                        agent_pb2.AgentReplyCommand(
+                        agent_pb2.AgentToHypervisorCommand(
                             command_id=command_id,
                             command_error=agent_pb2.CommandError(
                                 error='unknown payload encoding')
@@ -294,7 +294,7 @@ class VSockAgentJob(AgentJob):
 
         self._send_responses(
             [
-                agent_pb2.AgentReplyCommand(
+                agent_pb2.AgentToHypervisorCommand(
                     command_id=command_id,
                     file_chunk_reply=agent_pb2.FileChunkReply(
                         path=path,
@@ -310,7 +310,7 @@ class VSockAgentJob(AgentJob):
         symbolicmode.chmod(chmod_request.path, chmod_request.mode)
         self._send_responses(
             [
-                agent_pb2.AgentReplyCommand(
+                agent_pb2.AgentToHypervisorCommand(
                     command_id=request.command_id,
                     chmod_reply=agent_pb2.ChmodReply(
                         path=chmod_request.path
@@ -325,7 +325,7 @@ class VSockAgentJob(AgentJob):
         if not os.path.exists(get_request.path):
             self._send_responses(
                 [
-                    agent_pb2.AgentReplyCommand(
+                    agent_pb2.AgentToHypervisorCommand(
                         command_id=request.command_id,
                         command_error=agent_pb2.CommandError(
                             error='file not found')
@@ -338,7 +338,7 @@ class VSockAgentJob(AgentJob):
             st = os.stat(get_request.path)
             self._send_responses(
                 [
-                    agent_pb2.AgentReplyCommand(
+                    agent_pb2.AgentToHypervisorCommand(
                         command_id=request.command_id,
                         stat_result=agent_pb2.StatResult(
                             mode=st.st_mode,
@@ -357,7 +357,7 @@ class VSockAgentJob(AgentJob):
             while d := f.read(MAX_CHUNK_SIZE):
                 self._send_responses(
                     [
-                        agent_pb2.AgentReplyCommand(
+                        agent_pb2.AgentToHypervisorCommand(
                             command_id=request.command_id,
                             file_chunk=agent_pb2.FileChunk(
                                 offset=offset,
@@ -371,7 +371,7 @@ class VSockAgentJob(AgentJob):
 
             self._send_responses(
                 [
-                    agent_pb2.AgentReplyCommand(
+                    agent_pb2.AgentToHypervisorCommand(
                         command_id=request.command_id,
                         file_chunk=agent_pb2.FileChunk(
                             offset=offset,
@@ -385,7 +385,7 @@ class VSockAgentJob(AgentJob):
     def _attempt_decode(self):
         envelope = None
         try:
-            envelope = agent_pb2.AgentRequest()
+            envelope = agent_pb2.HypervisorToAgent()
             try:
                 consumed = envelope.ParseFromString(self.buffered)
             except DecodeError:
@@ -434,7 +434,7 @@ class VSockAgentJob(AgentJob):
                     self.log.debug('...unknown command')
                     self._send_responses(
                         [
-                            agent_pb2.AgentReplyCommand(
+                            agent_pb2.AgentToHypervisorCommand(
                                 command_id=request.command_id,
                                 unknown_command=agent_pb2.UnknownCommand(
                                     last_envelope=envelope
@@ -450,7 +450,7 @@ class VSockAgentJob(AgentJob):
             self.log.warning(f'...command error: {e}')
             self._send_responses(
                 [
-                    agent_pb2.AgentReplyCommand(
+                    agent_pb2.AgentToHypervisorCommand(
                         command_id=request.command_id,
                         command_error=agent_pb2.CommandError(
                             last_envelope=envelope,
