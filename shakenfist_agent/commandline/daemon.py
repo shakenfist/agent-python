@@ -323,12 +323,21 @@ class VSockAgentJob(AgentJob):
         self.log.debug('...get file')
         get_request = request.get_file_request
         if not os.path.exists(get_request.path):
+            fake_envelope = agent_pb2.AgentToHypervisor()
+            fake_envelope.commands.append(
+                agent_pb2.HypervisorToAgentCommand(
+                    command_id=f'{request.command_id}-partial',
+                    get_file_request=request
+                )
+            )
             self._send_responses(
                 [
                     agent_pb2.AgentToHypervisorCommand(
                         command_id=request.command_id,
                         command_error=agent_pb2.CommandError(
-                            error='file not found')
+                            error='file not found',
+                            last_envelope=fake_envelope
+                        )
                     )
                 ]
             )
