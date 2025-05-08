@@ -11,4 +11,4 @@ protobuf==5.29.3                   # bsd
 grpcio==1.70.0                     # apache2
 grpcio-status==1.70.0              # apache2
 grpcio-tools==1.70.0               # apache2
-googleapis-common-protos==1.66.0   # apache2
+googleapis-common-protos==1.70.0   # apache2
