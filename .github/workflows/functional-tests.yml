@@ -18,7 +18,7 @@ jobs:
   # These sanity checks used to be three separate jobs, but are now combined
   # to save a little time and reduce CI runner churn.
   sanity_checks:
-    runs-on: [self-hosted, vm]
+    runs-on: [self-hosted, vm, debian-12]
     needs: enqueue_pr_comment
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-lint
@@ -28,31 +28,45 @@ jobs:
       - name: Checkout code with two commits
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
+
+      - name: Upgrade base test tools
+        timeout-minutes: 5
+        run: |
+          python3 -mvenv /tmp/venv-test
+          . /tmp/venv-test/bin/activate
+          pip3 install uv
+          uv pip install tox tox-uv
 
       - name: Lint with flake8
         timeout-minutes: 5
         run: |
-          /usr/bin/tox -eflake8
+          . /tmp/venv-test/bin/activate
+          tox -eflake8
 
       - name: Attempt to install requirements
         timeout-minutes: 5
         run: |
-          python3 -mvenv /tmp/venv
-          /tmp/venv/bin/pip3 install -r requirements.txt
+          python3 -mvenv /tmp/venv-reqs
+          . /tmp/venv-reqs/bin/activate
+          pip3 install uv
+          uv pip install -r pyproject.toml
 
       - name: Run python3 unit tests
         timeout-minutes: 10
         run: |
-          /usr/bin/tox -epy3
+          . /tmp/venv-test/bin/activate
+          tox -epy3
 
       - name: List failing tests
         if: failure()
         id: failures
         run: |
+          . /tmp/venv-test/bin/activate
+
           echo "Gathering list of failed tests..."
           touch ${GITHUB_WORKSPACE}/failed
-          /usr/bin/tox -efailing || true > ${GITHUB_WORKSPACE}/failed
+          tox -efailing || true > ${GITHUB_WORKSPACE}/failed
           echo
 
           failed=$(cat ${GITHUB_WORKSPACE}/failed | egrep "^FAIL: " | \
@@ -71,7 +85,8 @@ jobs:
       - name: Generate coverage report
         timeout-minutes: 10
         run: |
-          /usr/bin/tox -ecover
+          . /tmp/venv-test/bin/activate
+          tox -ecover
           zip -r cover.zip cover
 
       - uses: actions/upload-artifact@v4
