@@ -88,7 +88,9 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         self.assertEqual(1, len(env), f'Unexpected length: {env}')
 
         self.assertEqual(cmd_id, env[0].command_id)
-        self.assertTrue(env[0].HasField('agent_welcome'))
+        self.assertTrue(
+            env[0].HasField('agent_welcome'),
+            f'Response was {env[0]}')
         self.assertTrue(env[0].agent_welcome.version.startswith('version '))
 
     @mock.patch('shakenfist_agent.commandline.daemon.VSockAgentJob._send_responses')
