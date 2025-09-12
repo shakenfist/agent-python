@@ -6,7 +6,7 @@ import json
 from linux_utils.fstab import find_mounted_filesystems
 import os
 from oslo_concurrency import processutils
-from pbr.version import VersionInfo
+from pbr.packaging import get_version
 import psutil
 import shutil
 import signal
@@ -90,14 +90,13 @@ class VSockAgentJob(AgentJob):
 
     def _handle_hypervisor_welcome(self, request):
         self.log.debug('...hypervisor welcome')
-        version_string = VersionInfo('shakenfist_agent').version_string()
-        version_string = version_string.split('+')[0]
+        sv = get_version('shakenfist_agent').split('.')
         self._send_responses(
             [
                 agent_pb2.AgentToHypervisorCommand(
                     command_id=request.command_id,
                     agent_welcome=agent_pb2.AgentWelcome(
-                        version=f'version {version_string}',
+                        version=f'version {sv}',
                         boot_time=psutil.boot_time()
                     )
                 )
@@ -436,6 +435,10 @@ class VSockAgentJob(AgentJob):
 
         except Exception as e:
             self.log.warning(f'...command error: {e}')
+
+            import traceback
+            traceback.print_exc()
+
             self._send_responses(
                 [
                     agent_pb2.AgentToHypervisorCommand(

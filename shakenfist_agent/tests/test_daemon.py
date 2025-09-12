@@ -90,6 +90,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         self.assertEqual(cmd_id, env[0].command_id)
         self.assertTrue(
             env[0].HasField('agent_welcome'),
+            f'Request was {msg}\n\n'
             f'Response was {env[0]}')
         self.assertTrue(env[0].agent_welcome.version.startswith('version '))
 
