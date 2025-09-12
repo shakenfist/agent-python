@@ -91,6 +91,7 @@ class VSockAgentJob(AgentJob):
     def _handle_hypervisor_welcome(self, request):
         self.log.debug('...hypervisor welcome')
         version_string = VersionInfo('shakenfist_agent').version_string()
+        version_string = version_string.split('+')[0]
         self._send_responses(
             [
                 agent_pb2.AgentToHypervisorCommand(
