@@ -6,7 +6,6 @@ import json
 from linux_utils.fstab import find_mounted_filesystems
 import os
 from oslo_concurrency import processutils
-from pbr.packaging import get_version
 import psutil
 import shutil
 import signal
@@ -74,6 +73,9 @@ class _ChunkConsumer:
             symbolicmode.chmod(self.path, self.mode)
 
 
+VERSION_CACHE = None
+
+
 class VSockAgentJob(AgentJob):
     def __init__(self, logger, conn):
         super().__init__(logger)
@@ -89,14 +91,24 @@ class VSockAgentJob(AgentJob):
         self.conn.sendall(out.SerializeToString())
 
     def _handle_hypervisor_welcome(self, request):
+        global VERSION_CACHE
         self.log.debug('...hypervisor welcome')
-        sv = get_version('shakenfist_agent').split('.')
+
+        if not VERSION_CACHE:
+            try:
+                from shakenfist_agent import _version
+                agent_version = VERSION_CACHE = _version.version
+            except ImportError as e:
+                agent_version = VERSION_CACHE = 'unreleased development version'
+        else:
+            agent_version = VERSION_CACHE
+
         self._send_responses(
             [
                 agent_pb2.AgentToHypervisorCommand(
                     command_id=request.command_id,
                     agent_welcome=agent_pb2.AgentWelcome(
-                        version=f'version {sv}',
+                        version=f'version {agent_version}',
                         boot_time=psutil.boot_time()
                     )
                 )
