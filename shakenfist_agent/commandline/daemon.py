@@ -121,7 +121,7 @@ class VSockAgentJob(AgentJob):
             try:
                 from shakenfist_agent import _version
                 agent_version = VERSION_CACHE = _version.version
-            except ImportError as e:
+            except ImportError:
                 agent_version = VERSION_CACHE = 'unreleased development version'
         else:
             agent_version = VERSION_CACHE
