@@ -134,3 +134,28 @@ sf-agent [--verbose/--no-verbose]
 ```
 
 The `--verbose` flag sets the log level to DEBUG.
+
+## Supported Platforms
+
+The agent must install and run on the system Python provided by
+each distribution. The oldest Python in this table determines the
+`requires-python` floor in `pyproject.toml` and the
+`constraints.python` value in `renovate.json`.
+
+| Distribution | Python Version |
+|--------------|----------------|
+| Ubuntu 20.04 | 3.8 |
+| Ubuntu 22.04 | 3.10 |
+| Ubuntu 24.04 | 3.12 |
+| Debian 11 | 3.9 |
+| Debian 12 | 3.11 |
+| Debian 13 | 3.13 |
+| CentOS 9-stream | 3.9 |
+| Fedora 41-43 | 3.13 |
+
+**Current minimum: Python 3.8** (Ubuntu 20.04).
+
+When dropping a distribution from this table, update:
+
+1. `requires-python` in `pyproject.toml`
+2. `constraints.python` in `renovate.json`

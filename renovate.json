@@ -1,0 +1,36 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "gitAuthor": "shakenfist-bot <bot@shakenfist.com>",
+  "dependencyDashboard": true,
+  "assignees": [
+    "mikalstill"
+  ],
+  "schedule": [
+    "after 9pm"
+  ],
+  "constraints": {
+    "python": ">=3.8"
+  },
+  "packageRules": [
+    {
+      "description": "Group grpc packages together",
+      "matchPackagePatterns": [
+        "^grpcio",
+        "^googleapis-common-protos",
+        "^protobuf"
+      ],
+      "groupName": "grpc packages"
+    },
+    {
+      "description": "Automatically merge minor and patch-level updates",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "automerge": false
+    }
+  ],
+  "minimumReleaseAge": "3 days",
+  "rollbackPrs": true
+}

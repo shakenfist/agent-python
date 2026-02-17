@@ -14,7 +14,9 @@ dynamic = ["version"]
 
 description = "The in-guest agent for ShakenFist instances"
 readme = "README.md"
-requires-python = ">=3.0"
+# Minimum Python determined by oldest supported distro.
+# See ARCHITECTURE.md "Supported Platforms" table.
+requires-python = ">=3.8"
 dependencies = [
     "click>=8.0.0",                     # bsd
     "distro",                           # apache2
