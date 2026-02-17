@@ -14,14 +14,13 @@ dynamic = ["version"]
 
 description = "The in-guest agent for ShakenFist instances"
 readme = "README.md"
-requires-python = ">=3.0"
+# Minimum Python determined by oldest supported distro.
+# See ARCHITECTURE.md "Supported Platforms" table.
+requires-python = ">=3.8"
 dependencies = [
     "click>=8.0.0",                     # bsd
-    "oslo.concurrency",                 # apache2
     "distro",                           # apache2
-    "linux-utils",                      # mit
     "psutil>5.9.0",                     # bsd
-    "shakenfist-utilities",             # apache2
     "symbolicmode>=2.0",                # CC0 1.0 Universal (CC0 1.0) Public Domain Dedication
     "setproctitle",                     # bsd
 
@@ -46,7 +45,7 @@ write_to = "shakenfist_agent/_version.py"
 [project.optional-dependencies]
 test = [
     "coverage",            # apache2
-    "testtools",           # mit
+    "testtools<2.8.0",     # mit; stestr uses _b removed in 2.8
     "mock",                # bsd
     "stestr",              # apache2
     "tox",                 # mit
