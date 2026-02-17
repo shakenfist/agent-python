@@ -5,11 +5,12 @@ import distro
 import fcntl
 import json
 import os
-from oslo_concurrency import processutils
 import psutil
+import random
 import shutil
 import signal
 import socket
+import string
 import struct
 import subprocess
 import symbolicmode
@@ -18,7 +19,6 @@ import threading
 
 from google.protobuf.message import DecodeError
 import setproctitle
-from shakenfist_utilities import random as sf_random
 
 from shakenfist_agent.protos import agent_pb2
 from shakenfist_agent.protos import common_pb2
@@ -26,6 +26,12 @@ from shakenfist_agent.protos import common_pb2
 
 MountEntry = namedtuple(
     'MountEntry', ['device', 'mount_point', 'vfs_type'])
+
+
+def random_id():
+    """Return a short random string."""
+    return ''.join(random.choices(
+        string.ascii_letters + string.digits, k=16))
 
 
 def find_mounted_filesystems():
@@ -145,10 +151,10 @@ class VSockAgentJob(AgentJob):
 
     def _handle_is_system_running(self, request):
         self.log.debug('...is system running')
-        out, _ = processutils.execute(
+        result = subprocess.run(
             'systemctl is-system-running', shell=True,
-            check_exit_code=False)
-        out = out.rstrip()
+            capture_output=True, text=True)
+        out = result.stdout.rstrip()
 
         self._send_responses(
             [
@@ -539,7 +545,7 @@ def daemon_run(ctx):
             time.sleep(0.2)
 
         if conn:
-            thread_name = sf_random.random_id()
+            thread_name = random_id()
             log = ctx.obj['LOGGER'].with_fields({
                 'remote_cid': remote_cid,
                 'remote_port': remote_port,

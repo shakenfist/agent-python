@@ -4,11 +4,11 @@ import os
 import tempfile
 import testtools
 
-from shakenfist_utilities import logs
-from shakenfist_utilities import random as sf_random
 import symbolicmode
 
+from shakenfist_agent import log as logs
 from shakenfist_agent.commandline import daemon
+from shakenfist_agent.commandline.daemon import random_id
 from shakenfist_agent.protos import agent_pb2
 from shakenfist_agent.protos import common_pb2
 
@@ -31,7 +31,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         d = daemon.VSockAgentJob(LOG, None)
 
         # Send an invalid ExecuteRequest
-        cmd_id = sf_random.random_id()
+        cmd_id = random_id()
         msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
             agent_pb2.HypervisorToAgentCommand(
@@ -66,7 +66,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         d = daemon.VSockAgentJob(LOG, None)
 
         # Send a HypervisorWelcome
-        cmd_id = sf_random.random_id()
+        cmd_id = random_id()
         msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
             agent_pb2.HypervisorToAgentCommand(
@@ -99,7 +99,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         d = daemon.VSockAgentJob(LOG, None)
 
         # Send a HypervisorDeparture
-        cmd_id = sf_random.random_id()
+        cmd_id = random_id()
         msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
             agent_pb2.HypervisorToAgentCommand(
@@ -120,7 +120,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         d = daemon.VSockAgentJob(LOG, None)
 
         # Send a PingRequest
-        cmd_id = sf_random.random_id()
+        cmd_id = random_id()
         msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
             agent_pb2.HypervisorToAgentCommand(
@@ -142,13 +142,14 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         self.assertEqual(cmd_id, env[0].command_id)
         self.assertTrue(env[0].HasField('ping_reply'))
 
-    @mock.patch('oslo_concurrency.processutils.execute', return_value=('running', ''))
+    @mock.patch('subprocess.run',
+                return_value=mock.Mock(stdout='running'))
     @mock.patch('shakenfist_agent.commandline.daemon.VSockAgentJob._send_responses')
-    def test_is_system_running(self, mock_send_responses, mock_execute):
+    def test_is_system_running(self, mock_send_responses, mock_run):
         d = daemon.VSockAgentJob(LOG, None)
 
         # Send a IsSystemRunningRequest
-        cmd_id = sf_random.random_id()
+        cmd_id = random_id()
         msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
             agent_pb2.HypervisorToAgentCommand(
@@ -162,10 +163,10 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         d._attempt_decode()
 
         # And make sure we replied correctly
-        self.assertEqual(1, len(mock_execute.mock_calls))
+        self.assertEqual(1, len(mock_run.mock_calls))
         self.assertEqual(
             'systemctl is-system-running',
-            mock_execute.call_args_list[0].args[0])
+            mock_run.call_args_list[0].args[0])
 
         self.assertEqual(1, len(mock_send_responses.mock_calls))
         env = mock_send_responses.call_args_list[0].args[0]
@@ -182,7 +183,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         d = daemon.VSockAgentJob(LOG, None)
 
         # Send a GatherFactsRequest
-        cmd_id = sf_random.random_id()
+        cmd_id = random_id()
         msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
             agent_pb2.HypervisorToAgentCommand(
@@ -210,7 +211,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
 
         # Send an ExecuteRequest, this really executes the command because
         # mocking Popen is fiddly.
-        cmd_id = sf_random.random_id()
+        cmd_id = random_id()
         msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
             agent_pb2.HypervisorToAgentCommand(
@@ -241,7 +242,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         d = daemon.VSockAgentJob(LOG, None)
 
         # Send a PutFileRequest, and then a series of FileChunks
-        cmd_id = sf_random.random_id()
+        cmd_id = random_id()
         msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
             agent_pb2.HypervisorToAgentCommand(
@@ -314,7 +315,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         d = daemon.VSockAgentJob(LOG, None)
 
         # Send a ChmodRequest
-        cmd_id = sf_random.random_id()
+        cmd_id = random_id()
         msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
             agent_pb2.HypervisorToAgentCommand(
@@ -353,7 +354,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
                     f.write('?' * 1024)
 
             # Send a GetFileRequest
-            cmd_id = sf_random.random_id()
+            cmd_id = random_id()
             msg = agent_pb2.HypervisorToAgent()
             msg.commands.append(
                 agent_pb2.HypervisorToAgentCommand(
@@ -385,7 +386,7 @@ class DaemonAgentV2TestCase(testtools.TestCase):
                 self.assertNotEqual('', env[0].file_chunk.payload)
 
                 # Ack the FileChunk
-                cmd_id = sf_random.random_id()
+                cmd_id = random_id()
                 msg = agent_pb2.HypervisorToAgent()
                 msg.commands.append(
                     agent_pb2.HypervisorToAgentCommand(

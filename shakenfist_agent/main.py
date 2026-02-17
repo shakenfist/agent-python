@@ -3,7 +3,7 @@
 import click
 import logging
 
-from shakenfist_utilities import logs
+from shakenfist_agent import log as logs
 
 from shakenfist_agent.commandline import daemon
 
