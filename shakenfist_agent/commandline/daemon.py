@@ -1,9 +1,9 @@
 import base64
 import click
+from collections import namedtuple
 import distro
 import fcntl
 import json
-from linux_utils.fstab import find_mounted_filesystems
 import os
 from oslo_concurrency import processutils
 import psutil
@@ -22,6 +22,23 @@ from shakenfist_utilities import random as sf_random
 
 from shakenfist_agent.protos import agent_pb2
 from shakenfist_agent.protos import common_pb2
+
+
+MountEntry = namedtuple(
+    'MountEntry', ['device', 'mount_point', 'vfs_type'])
+
+
+def find_mounted_filesystems():
+    """Parse /proc/mounts and yield MountEntry objects."""
+    with open('/proc/mounts', 'r') as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) >= 3:
+                yield MountEntry(
+                    device=parts[0],
+                    mount_point=parts[1].replace('\\040', ' '),
+                    vfs_type=parts[2],
+                )
 
 
 VSOCK_PORT = 1025
