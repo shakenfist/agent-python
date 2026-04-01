@@ -24,7 +24,7 @@ dependencies = [
     "symbolicmode>=2.0",                # CC0 1.0 Universal (CC0 1.0) Public Domain Dedication
     "setproctitle",                     # bsd
 
-    "protobuf>=5.29.0,<6",              # bsd
+    "protobuf>=5.29.0,<8",              # bsd
     "grpcio>=1.70.0",                   # apache2
     "grpcio-status>=1.70.0",            # apache2
     "grpcio-tools>=1.70.0",             # apache2
