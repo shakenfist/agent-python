@@ -14,13 +14,13 @@
   "packageRules": [
     {
       "description": "Group grpc packages together with widen strategy",
-      "matchPackagePatterns": [
-        "^grpcio",
-        "^googleapis-common-protos",
-        "^protobuf"
-      ],
       "groupName": "grpc packages",
-      "rangeStrategy": "widen"
+      "rangeStrategy": "widen",
+      "matchPackageNames": [
+        "/^grpcio/",
+        "/^googleapis-common-protos/",
+        "/^protobuf/"
+      ]
     },
     {
       "description": "Automatically merge minor and patch-level updates",
