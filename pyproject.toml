@@ -45,7 +45,7 @@ write_to = "shakenfist_agent/_version.py"
 [project.optional-dependencies]
 test = [
     "coverage",            # apache2
-    "testtools<2.8.0",     # mit; stestr uses _b removed in 2.8
+    "testtools<2.9.2",     # mit; stestr uses _b removed in 2.8
     "mock",                # bsd
     "stestr",              # apache2
     "tox",                 # mit
