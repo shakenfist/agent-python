@@ -525,11 +525,27 @@ def daemon_run(ctx):
             cid = struct.unpack('I', r)[0]
         click.echo(f'Our v2 vsock CID is {cid}.')
 
-        s = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
-        s.bind((cid, VSOCK_PORT))
-        s.listen()
-        s.settimeout(0.2)
-        click.echo('Listening for incoming v2 requests')
+        if cid < 3:
+            # CIDs 0 through 2 are reserved (the hypervisor, local loopback,
+            # and the host respectively); a real guest CID is always at
+            # least 3. We are handed VMADDR_CID_LOCAL (1) when the guest has
+            # no virtio-vsock device at all -- /dev/vsock exists because the
+            # vsock core module is loaded, but the only registered transport
+            # is loopback. That happens when the instance was created
+            # without the sf-agent2 side channel. Binding the loopback CID
+            # would listen on a socket the hypervisor can never connect to,
+            # so don't pretend the side channel works.
+            click.echo(
+                f'CID {cid} is reserved, which means this guest has no '
+                'vsock device. The instance was probably created without '
+                'the sf-agent2 side channel. Not listening for v2 '
+                'requests.')
+        else:
+            s = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
+            s.bind((cid, VSOCK_PORT))
+            s.listen()
+            s.settimeout(0.2)
+            click.echo('Listening for incoming v2 requests')
 
     workers = {}
     while not EXIT.is_set():
