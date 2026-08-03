@@ -23,7 +23,6 @@ jobs:
   # to save a little time and reduce CI runner churn.
   sanity_checks:
     runs-on: [self-hosted, vm, debian-12]
-    needs: enqueue_pr_comment
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-lint
       cancel-in-progress: true
@@ -100,64 +99,6 @@ jobs:
           if-no-files-found: error
           path: cover.zip
 
-      # Failures get announced here before we cancel stuff
-      - uses: slackapi/slack-github-action@v4.0.0
-        if: failure()
-        with:
-          method: chat.update
-          token: "${{ secrets.SLACK_BOT_TOKEN }}"
-          payload: |
-            channel: ${{ secrets.SLACK_CHANNEL_SHAKENFIST_CI }}
-            ts: "${{ needs.enqueue_pr_comment.outputs.ts }}"
-            text: |
-              The PR test attempt job at https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} failed.
-
-              PR title: ${{ github.event.pull_request.title }}
-              PR link: ${{ github.event.pull_request.html_url }}
-              PR author: ${{ github.event.pull_request.user.login }}
-            attachments:
-              - color: "ee9090"
-                fields:
-                  - title: "Status"
-                    short: true
-                    value: "Failure in sanity tests"
-
-  enqueue_pr_comment:
-    if: always() && github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-    outputs:
-      ts: "${{ steps.slack.outputs.ts }}"
-      commit: "${{ steps.commit_message.outputs.commit }}"
-    steps:
-      - name: Log the github event
-        run: |
-          cat - <<EOF
-          ${{ toJSON(github.event.pull_request) }}"
-          EOF
-
-      - name: Tell people a PR test attempt is running
-        id: slack
-        uses: slackapi/slack-github-action@v4.0.0
-        with:
-          method: chat.postMessage
-          token: "${{ secrets.SLACK_BOT_TOKEN }}"
-          payload: |
-            channel: ${{ secrets.SLACK_CHANNEL_SHAKENFIST_CI }}
-            text: |
-              A PR test attempt is running at https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} :rocket:
-
-              PR title: ${{ github.event.pull_request.title }}
-              PR link: ${{ github.event.pull_request.html_url }}
-              PR author: ${{ github.event.pull_request.user.login }}
-            attachments:
-              - color: "9090ee"
-                fields:
-                  - title: "Status"
-                    short: true
-                    value: "In Progress"
-
   can_see_status:
     runs-on: ubuntu-latest
     steps:
@@ -179,26 +120,6 @@ jobs:
           echo "ALL_SUCCESS=$(echo "$NEEDS_JSON" | jq '. | to_entries | map([.value.result == "success", .value.result == "skipped"] | any) | all')" >>$GITHUB_ENV
       - name: Check outcomes
         run: "[ $ALL_SUCCESS == true ]"
-      - uses: slackapi/slack-github-action@v4.0.0
-        if: success()
-        with:
-          method: chat.update
-          token: "${{ secrets.SLACK_BOT_TOKEN }}"
-          payload: |
-            channel: ${{ secrets.SLACK_CHANNEL_SHAKENFIST_CI }}
-            ts: "${{ needs.enqueue_pr_comment.outputs.ts }}"
-            text: |
-              The PR test attempt job at https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} succeeded.
-
-              PR title: ${{ github.event.pull_request.title }}
-              PR link: ${{ github.event.pull_request.html_url }}
-              PR author: ${{ github.event.pull_request.user.login }}
-            attachments:
-              - color: "90ee90"
-                fields:
-                  - title: "Status"
-                    short: true
-                    value: "Success"
 
   automated_reviewer:
     name: "Automated reviewer"
