@@ -13,6 +13,18 @@ messages. The agent handles commands such as executing processes,
 transferring files, gathering system facts, and checking service
 status.
 
+## Where the documentation lives
+
+| Question | Document |
+|----------|----------|
+| How is the agent put together? | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| What is the wire protocol? | [docs/protocol.md](docs/protocol.md) |
+| How do I build, test and release it? | [docs/developer-guide.md](docs/developer-guide.md) |
+| What does the agent do, from a user's point of view? | [docs/index.md](docs/index.md) |
+
+New user-visible documentation belongs in `docs/`. This file and
+`ARCHITECTURE.md` are a summary and an index into it.
+
 ## Key Patterns
 
 ### Adding a New Command

@@ -4,6 +4,11 @@ The Shaken Fist in-guest agent runs inside virtual machines and
 provides a side channel for the hypervisor to interact with the
 guest OS. Communication uses protobuf over a vsock connection.
 
+This document is the map. The message-by-message wire protocol is
+[docs/protocol.md](docs/protocol.md), building and testing is
+[docs/developer-guide.md](docs/developer-guide.md), and the
+user-facing overview is [docs/index.md](docs/index.md).
+
 ## Directory Structure
 
 ```
