@@ -20,7 +20,9 @@ def configure_logging():
     to a root logger with no handler on it and are dropped. basicConfig()
     gives root a handler. Once root has one, our own records reach both it
     and the handler setup_console() installed and are printed twice, which
-    is what turning off propagation prevents.
+    is what turning off propagation prevents. setup_console() already does
+    that for every logger it creates; it is repeated here so that the
+    entry point states the whole of its own logging setup in one place.
 
     Called from cli() rather than run at import: this reconfigures logging
     for the whole process, which is sf-agent's business when it is the

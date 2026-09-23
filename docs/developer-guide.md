@@ -73,6 +73,19 @@ anything". Run it locally with `tools/gitleaks-scan.sh`, or
 `tools/gitleaks-scan.sh --gitleaks PATH` to use a specific binary; it
 needs a full (not shallow) clone.
 
+If the positive control fails while nothing in the repository changed,
+the likely cause is a gitleaks upgrade (the job installs Debian's
+package, which is not pinned) renaming or splitting one of the two rules
+it expects, `github-pat` and `private-key`. The failure message lists
+the rules that did fire; update the expected list in the script to
+match, after checking that the new rule still catches the planted
+credential.
+
+None of these checks is configured as a required status check on
+`develop` today, so a failing gitleaks or agent context job is visible
+on the pull request but does not by itself block a merge; `can_merge`
+in `functional-tests.yml` only aggregates that workflow's own jobs.
+
 The same workflow runs [skillsaw](https://skillsaw.org/) over the agent
 context (`AGENTS.md` and anything else an agent is handed) by running
 its pre-commit hook. `.pre-commit-config.yaml` carries that hook

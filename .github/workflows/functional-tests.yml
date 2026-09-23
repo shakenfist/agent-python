@@ -159,7 +159,7 @@ jobs:
     # shared workflow so it stays in step with the rest of the fleet.
     needs: [check_paths, sanity_checks]
     if: >-
-      always() &&
+      !cancelled() &&
       needs.check_paths.result == 'success' &&
       (needs.sanity_checks.result == 'success' ||
        needs.sanity_checks.result == 'skipped')

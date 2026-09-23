@@ -100,4 +100,11 @@ All modules use `shakenfist_agent.log.setup_console(__name__)`
 for logger initialization. The returned adapter supports
 `.with_fields()` for structured key-value output. The main
 logger is created in `main.py` and passed to worker threads
-via the Click context.
+via the Click context. `setup_console()` turns propagation off
+for the logger it creates, and `main.configure_logging()` (run
+from `cli()`, never at import) gives the root logger a handler
+so dependencies' records are not dropped.
+
+Run `pre-commit install` once per clone; actionlint, shellcheck
+and skillsaw also run in CI. See the Continuous Integration
+section of [docs/developer-guide.md](docs/developer-guide.md).

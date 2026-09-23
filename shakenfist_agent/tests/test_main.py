@@ -5,6 +5,7 @@ from unittest import mock
 import testtools
 from click.testing import CliRunner
 
+from shakenfist_agent import log as logs
 from shakenfist_agent import main
 
 
@@ -33,13 +34,15 @@ class LoggingStateTestCase(testtools.TestCase):
             (module_logger, list(module_logger.handlers), module_logger.level),
             (other_logger, list(other_logger.handlers), other_logger.level),
         ]
-        propagate = module_logger.propagate
+        propagate = [(logger, logger.propagate)
+                     for logger in (module_logger, other_logger)]
 
         def restore():
             for logger, handlers, level in saved:
                 logger.handlers = handlers
                 logger.setLevel(level)
-            module_logger.propagate = propagate
+            for logger, value in propagate:
+                logger.propagate = value
 
         self.addCleanup(restore)
 
@@ -87,6 +90,17 @@ class ConfigureLoggingTestCase(LoggingStateTestCase):
 
         self.assertEqual(1, stdout.getvalue().count('from main'))
         self.assertEqual(0, root_stream.getvalue().count('from main'))
+
+    def test_other_setup_console_loggers_emit_once(self):
+        # AGENTS.md has every module call setup_console(__name__), so a
+        # second module doing so must not double-print either.
+        root_stream, stdout = self._configure()
+        other = logs.setup_console(OTHER)
+
+        other.info('from a second console logger')
+
+        self.assertEqual(1, stdout.getvalue().count('from a second console logger'))
+        self.assertEqual(0, root_stream.getvalue().count('from a second console logger'))
 
     def test_existing_root_handler_is_replaced(self):
         # basicConfig() without force is a no-op once root has a handler,
