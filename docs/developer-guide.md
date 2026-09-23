@@ -54,6 +54,14 @@ automated reviewer still runs on those pull requests. Commenting
 `@shakenfist-bot please retest` re-runs the workflow by dispatch, which
 always runs the full set.
 
+Two bot commands are honoured on pull requests, from collaborators
+with write access and on same-repository pull requests only:
+`@shakenfist-bot please re-review` asks the automated reviewer for
+another pass (`pr-re-review.yml`), and `@shakenfist-bot please retest`
+re-runs the functional tests (`pr-retest.yml`). The comment addressing
+bot that used to push fixes for review items has been retired fleet
+wide, and its workflow removed; address review items by hand.
+
 `.github/workflows/supply-chain.yml` scans the git history for leaked
 credentials with gitleaks on every pull request, every push to
 `develop` and weekly. It is deliberately not path filtered: a

@@ -65,7 +65,7 @@ jobs:
     # tests twice, which is more than one vCPU and 2GB wants to carry.
     runs-on: [self-hosted, vm, debian-13, s]
     # The timed steps sum to 35 minutes; the rest is headroom for the
-    # checkout, the artifact upload and the untimed failure listing.
+    # checkout and the artifact upload.
     timeout-minutes: 45
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-lint
@@ -104,30 +104,6 @@ jobs:
         run: |
           . /tmp/venv-test/bin/activate
           tox -epy3
-
-      - name: List failing tests
-        if: failure()
-        id: failures
-        run: |
-          . /tmp/venv-test/bin/activate
-
-          echo "Gathering list of failed tests..."
-          touch ${GITHUB_WORKSPACE}/failed
-          tox -efailing || true > ${GITHUB_WORKSPACE}/failed
-          echo
-
-          failed=$(cat ${GITHUB_WORKSPACE}/failed | egrep "^FAIL: " | \
-              sed -z 's/FAIL: shakenfist_ci\.//g;s/\n/, /g;s/, $/\n/')
-
-          echo "Failed tests:"
-          cat ${GITHUB_WORKSPACE}/failed
-          echo
-
-          echo "failures<<EOF" >> ${GITHUB_OUTPUT}
-          echo "${failed}" >> ${GITHUB_OUTPUT}
-          echo "EOF" >> ${GITHUB_OUTPUT}
-          echo "GITHUB_OUTPUT is:"
-          cat ${GITHUB_OUTPUT}
 
       - name: Generate coverage report
         timeout-minutes: 10
@@ -172,18 +148,21 @@ jobs:
 
   automated_reviewer:
     name: "Automated reviewer"
-    # The needs: list is the "review only once CI has passed" gate:
-    # a job skipped because a dependency failed never starts the
-    # reusable workflow. Everything else about the reviewer --
-    # runner, timeout, fork restriction, bot-commit check --
-    # lives in the shared workflow so it stays in step with the
-    # rest of the fleet.
-    needs: [sanity_checks]
-    # sanity_checks is skipped, not failed, on a docs-only pull request,
-    # and a skipped dependency would otherwise skip this job too. Docs
-    # changes deserve a review as much as code does, so run on a skip
-    # and hold back only on a real failure or a cancellation.
-    if: ${{ !failure() && !cancelled() }}
+    # The needs: list and the if: below are the "review only once CI
+    # has passed" gate. sanity_checks is skipped, not failed, on a
+    # docs-only pull request, and a plain needs: would skip this job
+    # along with it -- but docs changes deserve a review as much as
+    # code does. So the condition is spelled out: check_paths must
+    # have succeeded, and sanity_checks must have succeeded or been
+    # skipped by it. Everything else about the reviewer -- runner,
+    # timeout, fork restriction, bot-commit check -- lives in the
+    # shared workflow so it stays in step with the rest of the fleet.
+    needs: [check_paths, sanity_checks]
+    if: >-
+      always() &&
+      needs.check_paths.result == 'success' &&
+      (needs.sanity_checks.result == 'success' ||
+       needs.sanity_checks.result == 'skipped')
     # A cross-repository reusable workflow cannot grant itself more
     # token scope than its caller has, so the permissions go here.
     permissions:

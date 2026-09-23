@@ -25,11 +25,14 @@ def configure_logging():
     Called from cli() rather than run at import: this reconfigures logging
     for the whole process, which is sf-agent's business when it is the
     program being run and nobody else's when a test merely imports this
-    module.
+    module. force=True for the same reason: without it basicConfig() is a
+    silent no-op if anything imported earlier already gave root a handler,
+    leaving root unconfigured while propagation is still turned off below.
     """
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s %(levelname)s: %(name)s: %(message)s')
+        format='%(asctime)s %(levelname)s: %(name)s: %(message)s',
+        force=True)
     logging.getLogger(__name__).propagate = False
 
 

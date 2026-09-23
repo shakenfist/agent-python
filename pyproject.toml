@@ -26,7 +26,6 @@ dependencies = [
 
     "protobuf>=5.29.0,<8",              # bsd
     "grpcio>=1.70.0",                   # apache2
-    "googleapis-common-protos>=1.70.0", # apache2
 ]
 
 [project.urls]
