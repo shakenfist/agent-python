@@ -138,3 +138,7 @@ dmypy.json
 deploy/gitrepos/
 
 .vscode
+
+# Written by setuptools_scm at build time (see [tool.setuptools_scm] in
+# pyproject.toml). A committed copy would shadow the real version.
+shakenfist_agent/_version.py

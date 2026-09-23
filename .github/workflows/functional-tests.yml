@@ -19,10 +19,54 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Detect pull requests touching only docs/ so the vm lane below can
+  # skip them. A filter job rather than trigger-level paths-ignore, as in
+  # kerbside: the workflow still reports on every pull request, so a
+  # required status check added later cannot be left waiting forever on
+  # a filtered one, and a skipped job satisfies a required check where a
+  # workflow that never ran does not. On workflow_dispatch -- which is
+  # how pr-retest.yml re-runs this -- the filter step is skipped and the
+  # output defaults to code_changed=true, so a retest always tests.
+  check_paths:
+    name: "Check paths"
+    runs-on: [self-hosted, static]
+    timeout-minutes: 10
+    outputs:
+      code_changed: ${{ steps.filter.outputs.code || 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name != 'workflow_dispatch'
+      - uses: dorny/paths-filter@v4
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          # By default a file matches the filter if it matches ANY listed
+          # pattern, which makes '**' match everything and silently
+          # defeats the exclusion. 'every' requires a file to match ALL
+          # patterns, which is the correct semantics for "everything
+          # except docs".
+          predicate-quantifier: 'every'
+          filters: |
+            code:
+              - '**'
+              - '!docs/**'
+      # Make the verdict visible in the log rather than inferred from
+      # which downstream jobs skipped.
+      - name: Report verdict
+        run: echo "code_changed=${{ steps.filter.outputs.code || 'true (defaulted)' }}"
+
   # These sanity checks used to be three separate jobs, but are now combined
   # to save a little time and reduce CI runner churn.
   sanity_checks:
-    runs-on: [self-hosted, vm, debian-13]
+    needs: [check_paths]
+    if: needs.check_paths.outputs.code_changed == 'true'
+    # s rather than the conductor's xs fallback: the job builds three
+    # virtualenvs, installs the grpc stack into each and runs the unit
+    # tests twice, which is more than one vCPU and 2GB wants to carry.
+    runs-on: [self-hosted, vm, debian-13, s]
+    # The timed steps sum to 35 minutes; the rest is headroom for the
+    # checkout and the artifact upload.
+    timeout-minutes: 45
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-lint
       cancel-in-progress: true
@@ -61,30 +105,6 @@ jobs:
           . /tmp/venv-test/bin/activate
           tox -epy3
 
-      - name: List failing tests
-        if: failure()
-        id: failures
-        run: |
-          . /tmp/venv-test/bin/activate
-
-          echo "Gathering list of failed tests..."
-          touch ${GITHUB_WORKSPACE}/failed
-          tox -efailing || true > ${GITHUB_WORKSPACE}/failed
-          echo
-
-          failed=$(cat ${GITHUB_WORKSPACE}/failed | egrep "^FAIL: " | \
-              sed -z 's/FAIL: shakenfist_ci\.//g;s/\n/, /g;s/, $/\n/')
-
-          echo "Failed tests:"
-          cat ${GITHUB_WORKSPACE}/failed
-          echo
-
-          echo "failures<<EOF" >> ${GITHUB_OUTPUT}
-          echo "${failed}" >> ${GITHUB_OUTPUT}
-          echo "EOF" >> ${GITHUB_OUTPUT}
-          echo "GITHUB_OUTPUT is:"
-          cat ${GITHUB_OUTPUT}
-
       - name: Generate coverage report
         timeout-minutes: 10
         run: |
@@ -100,18 +120,23 @@ jobs:
           path: cover.zip
 
   can_see_status:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, static]
+    # Runs "true", so five minutes is generous even on a busy runner.
+    timeout-minutes: 5
     steps:
       - name: "Immediate success"
         run: true
 
   can_merge:
     needs:
+      - check_paths
       - sanity_checks
     if: always()
     permissions:
       actions: read
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, static]
+    # A jq one-liner over the needs context.
+    timeout-minutes: 5
     steps:
       - env:
           NEEDS_JSON: "${{toJSON(needs)}}"
@@ -123,13 +148,21 @@ jobs:
 
   automated_reviewer:
     name: "Automated reviewer"
-    # The needs: list is the "review only once CI has passed" gate:
-    # a job skipped because a dependency failed never starts the
-    # reusable workflow. Everything else about the reviewer --
-    # runner, timeout, fork restriction, bot-commit check --
-    # lives in the shared workflow so it stays in step with the
-    # rest of the fleet.
-    needs: [sanity_checks]
+    # The needs: list and the if: below are the "review only once CI
+    # has passed" gate. sanity_checks is skipped, not failed, on a
+    # docs-only pull request, and a plain needs: would skip this job
+    # along with it -- but docs changes deserve a review as much as
+    # code does. So the condition is spelled out: check_paths must
+    # have succeeded, and sanity_checks must have succeeded or been
+    # skipped by it. Everything else about the reviewer -- runner,
+    # timeout, fork restriction, bot-commit check -- lives in the
+    # shared workflow so it stays in step with the rest of the fleet.
+    needs: [check_paths, sanity_checks]
+    if: >-
+      !cancelled() &&
+      needs.check_paths.result == 'success' &&
+      (needs.sanity_checks.result == 'success' ||
+       needs.sanity_checks.result == 'skipped')
     # A cross-repository reusable workflow cannot grant itself more
     # token scope than its caller has, so the permissions go here.
     permissions:

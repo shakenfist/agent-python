@@ -29,14 +29,27 @@ shakenfist_agent/
     tests/
         __init__.py
         test_daemon.py   # Unit tests for command handlers
+        test_main.py     # Unit tests for CLI logging setup
+
+tools/
+    flake8wrap.sh        # flake8 over the files changed in HEAD
+    gitleaks-scan.sh     # Credential scan with a positive control
 
 pyproject.toml           # Build config (setuptools + setuptools_scm)
 tox.ini                  # Test runner configuration
+.pre-commit-config.yaml  # actionlint, shellcheck, skillsaw
 
 .github/
     workflows/
         functional-tests.yml  # CI: lint, unit tests, coverage
+        supply-chain.yml      # CI: gitleaks, agent context lint
+        pr-re-review.yml      # Bot: re-review on request
+        pr-retest.yml         # Bot: re-run functional tests
+        release.yml           # Build and publish a release
 ```
+
+The CI and bot workflows are described in
+[docs/developer-guide.md](docs/developer-guide.md#continuous-integration).
 
 ## Communication Model
 

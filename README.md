@@ -9,10 +9,10 @@ system information.
 
 ## Documentation
 
-- [docs/index.md](docs/index.md) -- overview and feature summary
-- [docs/protocol.md](docs/protocol.md) -- protobuf protocol
+- [docs/index.md](https://github.com/shakenfist/agent-python/blob/develop/docs/index.md) -- overview and feature summary
+- [docs/protocol.md](https://github.com/shakenfist/agent-python/blob/develop/docs/protocol.md) -- protobuf protocol
   reference
-- [docs/developer-guide.md](docs/developer-guide.md) -- building,
+- [docs/developer-guide.md](https://github.com/shakenfist/agent-python/blob/develop/docs/developer-guide.md) -- building,
   testing, and extending the agent
 
 ## Quick Start
@@ -35,5 +35,5 @@ tox -eflake8
 tox -ecover
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the project structure
-and [AGENTS.md](AGENTS.md) for AI agent guidance.
+See [ARCHITECTURE.md](https://github.com/shakenfist/agent-python/blob/develop/ARCHITECTURE.md) for the project structure
+and [AGENTS.md](https://github.com/shakenfist/agent-python/blob/develop/AGENTS.md) for AI agent guidance.

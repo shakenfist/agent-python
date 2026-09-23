@@ -95,4 +95,9 @@ def setup_console(name):
     handler = _ConsoleHandler()
     handler.formatter = _ConsoleFormatter()
     log.handlers = [handler]
+    # This logger now has a handler of its own, so once anything gives
+    # root one too (as sf-agent's cli() does) a propagating record would
+    # be printed twice. Keeping propagation off here makes that hold for
+    # every caller, not only the entry point.
+    log.propagate = False
     return log.with_prefix()
