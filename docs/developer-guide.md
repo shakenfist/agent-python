@@ -44,6 +44,16 @@ tox -eflake8
 tox -ecover
 ```
 
+## Continuous Integration
+
+Pull requests to `develop` run `.github/workflows/functional-tests.yml`.
+Its `sanity_checks` job (flake8, a dependency install check, unit tests
+and coverage) runs on an ephemeral VM runner, so a `check_paths` job
+skips it when a pull request changes nothing outside `docs/`. The
+automated reviewer still runs on those pull requests. Commenting
+`@shakenfist-bot please retest` re-runs the workflow by dispatch, which
+always runs the full set.
+
 ## Adding a New Command
 
 1. **Define the protobuf messages.** Add request and reply
