@@ -65,6 +65,12 @@ anything". Run it locally with `tools/gitleaks-scan.sh`, or
 `tools/gitleaks-scan.sh --gitleaks PATH` to use a specific binary; it
 needs a full (not shallow) clone.
 
+The same workflow runs [skillsaw](https://skillsaw.org/) over the agent
+context (`AGENTS.md` and anything else an agent is handed) by running
+its pre-commit hook. `.pre-commit-config.yaml` carries that hook
+alongside actionlint and shellcheck, so run `pre-commit install` once
+per clone and `pre-commit run --all-files` before proposing a change.
+
 ## Adding a New Command
 
 1. **Define the protobuf messages.** Add request and reply

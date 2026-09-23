@@ -1,14 +1,18 @@
 # Checks on the content of the repository itself: credentials in the
-# history.
+# history, and smuggled instructions in the agent context.
 #
 # Runs on every pull request to develop and on pushes to it, plus a
 # weekly cron to catch drift in the rule set.
 #
 # Deliberately NOT gated on a docs path filter, unlike the sanity checks
 # in functional-tests.yml. Every other lane can skip a
-# documentation-only change; this one cannot, because a credential
+# documentation-only change; these two cannot, because a credential
 # pasted into a code sample is a credential. The one real key secret
-# this fleet's scanning has ever found was published in a user guide.
+# this fleet's scanning has ever found was published in a user guide,
+# and a document is exactly where an instruction aimed at an agent
+# would be hidden. Both jobs invoke a content scanner, which is what
+# exempts this workflow from the fleet's expensive lane path filter
+# audit.
 #
 # gitleaks-action@v2 refuses to run on organization repositories without
 # a paid licence, so the upstream gitleaks binary is invoked directly,
@@ -59,3 +63,32 @@ jobs:
 
       - name: Scan history for credentials
         run: tools/gitleaks-scan.sh
+
+  agent-context:
+    name: agent context
+    runs-on: [self-hosted, vm, debian-13, xs]
+    timeout-minutes: 15
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-agent-context
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # Lints the agent context by running the pre-commit hook rather
+      # than invoking skillsaw directly, so .pre-commit-config.yaml's
+      # rev is the only place the version is written down. skillsaw's
+      # rule set moves between releases, and renovate's pre-commit
+      # manager bumps the hook on its own, so a second pin here would
+      # drift without anyone choosing it. Running it in CI as well as
+      # in pre-commit is the point: a hook can be skipped with
+      # --no-verify, or by a clone that never ran `pre-commit install`.
+      - name: Lint agent context
+        timeout-minutes: 5
+        run: |
+          python3 -mvenv /tmp/venv-skillsaw
+          . /tmp/venv-skillsaw/bin/activate
+          pip3 install uv
+          uv pip install pre-commit
+          pre-commit run skillsaw --all-files
