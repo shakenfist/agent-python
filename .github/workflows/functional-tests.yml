@@ -22,7 +22,13 @@ jobs:
   # These sanity checks used to be three separate jobs, but are now combined
   # to save a little time and reduce CI runner churn.
   sanity_checks:
-    runs-on: [self-hosted, vm, debian-13]
+    # s rather than the conductor's xs fallback: the job builds three
+    # virtualenvs, installs the grpc stack into each and runs the unit
+    # tests twice, which is more than one vCPU and 2GB wants to carry.
+    runs-on: [self-hosted, vm, debian-13, s]
+    # The timed steps sum to 35 minutes; the rest is headroom for the
+    # checkout, the artifact upload and the untimed failure listing.
+    timeout-minutes: 45
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-lint
       cancel-in-progress: true
