@@ -54,6 +54,17 @@ automated reviewer still runs on those pull requests. Commenting
 `@shakenfist-bot please retest` re-runs the workflow by dispatch, which
 always runs the full set.
 
+`.github/workflows/supply-chain.yml` scans the git history for leaked
+credentials with gitleaks on every pull request, every push to
+`develop` and weekly. It is deliberately not path filtered: a
+credential in a documentation sample is still a credential. The scan
+lives in `tools/gitleaks-scan.sh`, which also plants two credentials in
+a scratch directory and fails unless gitleaks reports both, so a clean
+result means "scanned and found nothing" rather than "could not find
+anything". Run it locally with `tools/gitleaks-scan.sh`, or
+`tools/gitleaks-scan.sh --gitleaks PATH` to use a specific binary; it
+needs a full (not shallow) clone.
+
 ## Adding a New Command
 
 1. **Define the protobuf messages.** Add request and reply
