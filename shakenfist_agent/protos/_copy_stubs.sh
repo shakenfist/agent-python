@@ -6,5 +6,5 @@ for proto in agent common; do
 done
 
 for item in *.py; do
-    sed -i '' "s/from shakenfist.protos import/from shakenfist_agent.protos import/g" ${item}
+    sed -i '' "s/from shakenfist.protos import/from shakenfist_agent.protos import/g" "${item}"
 done
