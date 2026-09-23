@@ -22,7 +22,7 @@ jobs:
   # These sanity checks used to be three separate jobs, but are now combined
   # to save a little time and reduce CI runner churn.
   sanity_checks:
-    runs-on: [self-hosted, vm, debian-12]
+    runs-on: [self-hosted, vm, debian-13]
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-lint
       cancel-in-progress: true
