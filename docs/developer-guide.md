@@ -18,7 +18,8 @@ shakenfist_agent/
         common.proto     # Shared protobuf definitions
         *_pb2.py         # Generated stubs (do not edit)
     tests/
-        test_daemon.py   # Unit tests
+        test_daemon.py   # Unit tests for the daemon
+        test_main.py     # Unit tests for CLI logging setup
 ```
 
 ## Building
