@@ -30,15 +30,17 @@ class DaemonAgentV2TestCase(testtools.TestCase):
     def test_command_error(self, mock_send_responses):
         d = daemon.VSockAgentJob(LOG, None)
 
-        # Send an invalid ExecuteRequest
+        # Send an ExecuteRequest which cannot be started because its working
+        # directory does not exist
         cmd_id = random_id()
         msg = agent_pb2.HypervisorToAgent()
         msg.commands.append(
             agent_pb2.HypervisorToAgentCommand(
                 command_id=cmd_id,
                 execute_request=common_pb2.ExecuteRequest(
-                    command='/bin/nosuch',
-                    io_priority=common_pb2.ExecuteRequest.HIGH
+                    command='whoami',
+                    working_directory='/nosuch/directory',
+                    io_priority=common_pb2.ExecuteRequest.NORMAL
                 )
             )
         )
@@ -236,6 +238,81 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         self.assertEqual(cmd_id, env[0].command_id)
         self.assertTrue(env[0].HasField('execute_reply'))
         self.assertNotEqual(0, len(env[0].execute_reply.stdout))
+
+    def _execute(self, mock_send_responses, command):
+        d = daemon.VSockAgentJob(LOG, None)
+
+        cmd_id = random_id()
+        msg = agent_pb2.HypervisorToAgent()
+        msg.commands.append(
+            agent_pb2.HypervisorToAgentCommand(
+                command_id=cmd_id,
+                execute_request=common_pb2.ExecuteRequest(
+                    command=command,
+                    io_priority=common_pb2.ExecuteRequest.NORMAL
+                )
+            )
+        )
+
+        d.buffered += msg.SerializeToString()
+        d._attempt_decode()
+
+        self.assertEqual(1, len(mock_send_responses.mock_calls))
+        env = mock_send_responses.call_args_list[0].args[0]
+        self.assertEqual(1, len(env), f'Unexpected length: {env}')
+        self.assertEqual(cmd_id, env[0].command_id)
+        self.assertTrue(env[0].HasField('execute_reply'))
+        return env[0].execute_reply
+
+    @mock.patch('shakenfist_agent.commandline.daemon.VSockAgentJob._send_responses')
+    def test_execute_missing_command(self, mock_send_responses):
+        # A missing executable is reported by the shell as a normal reply with
+        # exit code 127, not as a command error.
+        reply = self._execute(mock_send_responses, '/bin/nosuch')
+        self.assertEqual(127, reply.exit_code)
+        self.assertNotEqual(0, len(reply.stderr))
+
+    @mock.patch('shakenfist_agent.commandline.daemon.VSockAgentJob._send_responses')
+    def test_execute_environment_prefix(self, mock_send_responses):
+        reply = self._execute(mock_send_responses, 'SF_TEST_VALUE=banana printenv SF_TEST_VALUE')
+        self.assertEqual(0, reply.exit_code)
+        self.assertEqual('banana\n', reply.stdout)
+
+    @mock.patch('shakenfist_agent.commandline.daemon.VSockAgentJob._send_responses')
+    def test_execute_shell_builtin(self, mock_send_responses):
+        reply = self._execute(mock_send_responses, 'cd / && pwd')
+        self.assertEqual(0, reply.exit_code)
+        self.assertEqual('/\n', reply.stdout)
+
+    @mock.patch('shakenfist_agent.commandline.daemon.VSockAgentJob._send_responses')
+    @mock.patch('psutil.Process')
+    @mock.patch('subprocess.Popen')
+    def test_execute_wrapped_command(self, mock_popen, mock_process, mock_send_responses):
+        # Wrappers must apply to a quoted inner shell, not to the first word
+        # of the command line.
+        mock_process.return_value.ionice.return_value = (0, 0)
+        mock_popen.return_value.communicate.return_value = ('', '')
+        mock_popen.return_value.returncode = 0
+
+        d = daemon.VSockAgentJob(LOG, None)
+        msg = agent_pb2.HypervisorToAgent()
+        msg.commands.append(
+            agent_pb2.HypervisorToAgentCommand(
+                command_id=random_id(),
+                execute_request=common_pb2.ExecuteRequest(
+                    command="FOO='a b' cmd | other",
+                    network_namespace='ns1',
+                    io_priority=common_pb2.ExecuteRequest.HIGH
+                )
+            )
+        )
+        d.buffered += msg.SerializeToString()
+        d._attempt_decode()
+
+        self.assertEqual(
+            "ip netns exec ns1 ionice -c 2 -n 0 /bin/sh -c 'FOO='\"'\"'a b'\"'\"' cmd | other'",
+            mock_popen.call_args.args[0])
+        self.assertTrue(mock_popen.call_args.kwargs['shell'])
 
     @mock.patch('shakenfist_agent.commandline.daemon.VSockAgentJob._send_responses')
     def test_put_file(self, mock_send_responses):

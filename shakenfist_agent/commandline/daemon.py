@@ -7,7 +7,7 @@ import json
 import os
 import psutil
 import random
-import shutil
+import shlex
 import signal
 import socket
 import string
@@ -58,10 +58,6 @@ IO_PRIORITIES = {
     common_pb2.ExecuteRequest.LOW: (2, 7),
     common_pb2.ExecuteRequest.HIGH: (2, 0)
 }
-
-
-class NoSuchCommand(Exception):
-    ...
 
 
 class IOClassException(Exception):
@@ -210,12 +206,14 @@ class VSockAgentJob(AgentJob):
     def _handle_execute(self, request):
         self.log.debug('...execute')
         execute_request = request.execute_request
-        command = execute_request.command
-        if not shutil.which(command.split(' ')[0]):
-            raise NoSuchCommand(f'No such command: {command}')
-
+        # Wrappers such as ionice and ip netns exec run an executable, not a
+        # shell command line. If we have any, the command is quoted and run by
+        # an inner shell so that full shell syntax (environment variable
+        # prefixes, builtins, pipes and so on) still works, and the wrapper
+        # applies to the whole command line rather than its first word.
+        wrappers = []
         if execute_request.network_namespace != '':
-            command = f'ip netns exec {execute_request.network_namespace} {command}'
+            wrappers.extend(['ip', 'netns', 'exec', execute_request.network_namespace])
 
         env_variables = {}
         for env_var in execute_request.environment_variables:
@@ -237,8 +235,8 @@ class VSockAgentJob(AgentJob):
                 execute_request.io_priority, IO_PRIORITIES[common_pb2.ExecuteRequest.NORMAL])
 
             if current_iopriority != requested_iopriority:
-                command = (f'ionice -c {requested_iopriority[0]} '
-                           f'-n {requested_iopriority[1]} {command}')
+                wrappers.extend(['ionice', '-c', str(requested_iopriority[0]),
+                                 '-n', str(requested_iopriority[1])])
         elif execute_request.io_priority != common_pb2.ExecuteRequest.NORMAL:
             raise IOClassException(
                 'Changing IO priority is not supported on this platform')
@@ -246,6 +244,10 @@ class VSockAgentJob(AgentJob):
         working_directory = None
         if execute_request.working_directory != '':
             working_directory = execute_request.working_directory
+
+        command = execute_request.command
+        if wrappers:
+            command = shlex.join(wrappers + ['/bin/sh', '-c', command])
 
         start_time = time.time()
         pipe = subprocess.PIPE
