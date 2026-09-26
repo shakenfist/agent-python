@@ -245,6 +245,11 @@ class VSockAgentJob(AgentJob):
         if execute_request.working_directory != '':
             working_directory = execute_request.working_directory
 
+        # The wrapped command is still run by an outer shell rather than as an
+        # argv list with shell=False. environment_variables replaces the whole
+        # environment, so it often has no PATH; the shell then finds ip and
+        # ionice via its own default PATH, whereas Popen would only search
+        # /bin:/usr/bin and can miss ip in /sbin.
         command = execute_request.command
         if wrappers:
             command = shlex.join(wrappers + ['/bin/sh', '-c', command])

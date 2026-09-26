@@ -90,6 +90,13 @@ it. A missing executable produces a normal reply with exit code
 returned when the command cannot be started, for example
 because the working directory does not exist.
 
+Agents up to and including v1.0.1 checked that the first word of
+the command was an executable on `PATH` and returned a
+`CommandError` if it was not, which also rejected valid shell such
+as `FOO=bar cmd`. Hypervisor-side callers that need to detect a
+missing command should check `exit_code` rather than relying on
+the operation failing.
+
 ### Put File
 
 Uploads a file to the guest. The `PutFileRequest` includes the

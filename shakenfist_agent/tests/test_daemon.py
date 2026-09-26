@@ -1,6 +1,7 @@
 import base64
 import mock
 import os
+import psutil
 import tempfile
 import testtools
 
@@ -285,13 +286,47 @@ class DaemonAgentV2TestCase(testtools.TestCase):
         self.assertEqual('/\n', reply.stdout)
 
     @mock.patch('shakenfist_agent.commandline.daemon.VSockAgentJob._send_responses')
+    def test_execute_environment_without_path(self, mock_send_responses):
+        # environment_variables replaces the whole environment, so there is no
+        # PATH. The ionice wrapper must still be found. LOW priority forces the
+        # wrapper unless the test itself already runs at that priority.
+        if not hasattr(psutil.Process(), 'ionice'):
+            self.skipTest('ionice is not supported on this platform')
+
+        d = daemon.VSockAgentJob(LOG, None)
+        msg = agent_pb2.HypervisorToAgent()
+        msg.commands.append(
+            agent_pb2.HypervisorToAgentCommand(
+                command_id=random_id(),
+                execute_request=common_pb2.ExecuteRequest(
+                    command='echo $SF_TEST_VALUE',
+                    environment_variables=[
+                        common_pb2.EnvironmentVariable(name='SF_TEST_VALUE', value='banana')
+                    ],
+                    io_priority=common_pb2.ExecuteRequest.LOW
+                )
+            )
+        )
+        d.buffered += msg.SerializeToString()
+        d._attempt_decode()
+
+        env = mock_send_responses.call_args_list[0].args[0]
+        self.assertTrue(env[0].HasField('execute_reply'), env[0])
+        self.assertEqual(0, env[0].execute_reply.exit_code, env[0].execute_reply.stderr)
+        self.assertEqual('banana\n', env[0].execute_reply.stdout)
+
+    @mock.patch('shakenfist_agent.commandline.daemon.VSockAgentJob._send_responses')
     @mock.patch('psutil.Process')
     @mock.patch('subprocess.Popen')
-    def test_execute_wrapped_command(self, mock_popen, mock_process, mock_send_responses):
-        # Wrappers must apply to a quoted inner shell, not to the first word
-        # of the command line.
-        mock_process.return_value.ionice.return_value = (0, 0)
-        mock_popen.return_value.communicate.return_value = ('', '')
+    def _mocked_execute(self, ionice, network_namespace, io_priority,
+                        mock_popen, mock_process, mock_send_responses):
+        # Run an execute request with Popen mocked out and return the command
+        # line Popen was given, or the command error if there was one.
+        if ionice is None:
+            mock_process.return_value.ionice.side_effect = AttributeError
+        else:
+            mock_process.return_value.ionice.return_value = ionice
+        mock_popen.return_value.communicate.return_value = (b'', b'')
         mock_popen.return_value.returncode = 0
 
         d = daemon.VSockAgentJob(LOG, None)
@@ -301,18 +336,53 @@ class DaemonAgentV2TestCase(testtools.TestCase):
                 command_id=random_id(),
                 execute_request=common_pb2.ExecuteRequest(
                     command="FOO='a b' cmd | other",
-                    network_namespace='ns1',
-                    io_priority=common_pb2.ExecuteRequest.HIGH
+                    network_namespace=network_namespace,
+                    io_priority=io_priority
                 )
             )
         )
         d.buffered += msg.SerializeToString()
         d._attempt_decode()
 
+        env = mock_send_responses.call_args_list[0].args[0]
+        if env[0].HasField('command_error'):
+            return None, env[0].command_error.error
+
+        self.assertTrue(env[0].HasField('execute_reply'))
+        self.assertTrue(mock_popen.call_args.kwargs['shell'])
+        return mock_popen.call_args.args[0], None
+
+    def test_execute_wrapped_command(self):
+        # Wrappers must apply to a quoted inner shell, not to the first word
+        # of the command line.
+        command, _ = self._mocked_execute((0, 0), 'ns1', common_pb2.ExecuteRequest.HIGH)
         self.assertEqual(
             "ip netns exec ns1 ionice -c 2 -n 0 /bin/sh -c 'FOO='\"'\"'a b'\"'\"' cmd | other'",
-            mock_popen.call_args.args[0])
-        self.assertTrue(mock_popen.call_args.kwargs['shell'])
+            command)
+
+    def test_execute_network_namespace_only(self):
+        command, _ = self._mocked_execute((2, 4), 'ns1', common_pb2.ExecuteRequest.NORMAL)
+        self.assertEqual(
+            "ip netns exec ns1 /bin/sh -c 'FOO='\"'\"'a b'\"'\"' cmd | other'",
+            command)
+
+    def test_execute_network_namespace_is_quoted(self):
+        command, _ = self._mocked_execute((2, 4), 'ns1; touch /tmp/x', common_pb2.ExecuteRequest.NORMAL)
+        self.assertTrue(command.startswith("ip netns exec 'ns1; touch /tmp/x' /bin/sh -c "), command)
+
+    def test_execute_unwrapped_command_is_verbatim(self):
+        command, _ = self._mocked_execute((2, 4), '', common_pb2.ExecuteRequest.NORMAL)
+        self.assertEqual("FOO='a b' cmd | other", command)
+
+    def test_execute_ionice_unsupported(self):
+        # Without ionice support NORMAL runs unwrapped, anything else is an
+        # error.
+        command, _ = self._mocked_execute(None, '', common_pb2.ExecuteRequest.NORMAL)
+        self.assertEqual("FOO='a b' cmd | other", command)
+
+        command, error = self._mocked_execute(None, '', common_pb2.ExecuteRequest.HIGH)
+        self.assertIsNone(command)
+        self.assertEqual('Changing IO priority is not supported on this platform', error)
 
     @mock.patch('shakenfist_agent.commandline.daemon.VSockAgentJob._send_responses')
     def test_put_file(self, mock_send_responses):
