@@ -364,7 +364,9 @@ class VSockAgentJob(AgentJob):
             return
 
         with open(get_request.path, 'rb') as f:
-            st = os.stat(get_request.path)
+            # Stat what we opened, not the path: the path may have been
+            # unlinked or replaced since the open.
+            st = os.fstat(f.fileno())
             self._send_responses(
                 [
                     agent_pb2.AgentToHypervisorCommand(

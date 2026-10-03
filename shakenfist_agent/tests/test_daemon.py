@@ -552,3 +552,42 @@ class DaemonAgentV2TestCase(testtools.TestCase):
             self.assertEqual(
                 agent_pb2.FileChunk.BASE64, env[0].file_chunk.encoding)
             self.assertEqual('', env[0].file_chunk.payload)
+
+    @mock.patch('shakenfist_agent.commandline.daemon.VSockAgentJob._send_responses')
+    def test_get_file_unlinked_after_open(self, mock_send_responses):
+        # The path can disappear between the open and the stat (shakenfist
+        # CI's stall-then-rescue fixture does exactly this). The stat must
+        # describe the file we opened rather than fail on the missing path.
+        d = daemon.VSockAgentJob(LOG, None)
+        real_open = open
+
+        def open_then_unlink(path, *args, **kwargs):
+            f = real_open(path, *args, **kwargs)
+            os.unlink(path)
+            return f
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = os.path.join(td, 'tempfile')
+            with open(tmp, 'w') as f:
+                f.write('?' * 1024)
+
+            cmd_id = random_id()
+            msg = agent_pb2.HypervisorToAgent()
+            msg.commands.append(
+                agent_pb2.HypervisorToAgentCommand(
+                    command_id=cmd_id,
+                    get_file_request=agent_pb2.GetFileRequest(
+                        path=tmp
+                    )
+                )
+            )
+
+            with mock.patch.object(daemon, 'open', open_then_unlink, create=True):
+                d.buffered += msg.SerializeToString()
+                d._attempt_decode()
+
+            self.assertFalse(os.path.exists(tmp))
+            env = mock_send_responses.call_args_list[0].args[0]
+            self.assertEqual(1, len(env), f'Unexpected length: {env}')
+            self.assertTrue(env[0].HasField('stat_result'), f'No stat_result: {env}')
+            self.assertEqual(1024, env[0].stat_result.size)
