@@ -108,3 +108,9 @@ so dependencies' records are not dropped.
 Run `pre-commit install` once per clone; actionlint, shellcheck
 and skillsaw also run in CI. See the Continuous Integration
 section of [docs/developer-guide.md](docs/developer-guide.md).
+
+Changes merge to `develop` through the merge queue, never around
+it: a release tag is only accepted on a commit whose queue run
+passed. A new `functional-tests.yml` job goes in the `needs:` of
+"Can enqueue" and "Can merge". See "Merging" and "Releasing" in
+[docs/developer-guide.md](docs/developer-guide.md).
