@@ -95,7 +95,9 @@ report.
    **Build concurrency** 1 and **Minimum group size** 1. A serial
    queue is what the consistency audit's `merge-queue-config`
    criterion accepts, and what the workflow's concurrency groups
-   assume
+   assume. **Maximum group size** can stay at its default: with one
+   entry built at a time there is never more than one passing entry
+   to merge, so every merge commit is one a merge queue run tested
 5. Enable **Require status checks to pass**, and add "Can enqueue"
    and "Can merge", with **GitHub Actions** as the source
 6. Keep the bypass list short. A merge that bypasses the queue gets

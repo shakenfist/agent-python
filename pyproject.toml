@@ -41,7 +41,9 @@ sf-agent = "shakenfist_agent.main:cli"
 # file as package data, so they would come straight back as data without
 # this. Nothing in this package reads a data file at runtime: the
 # generated *_pb2 modules embed their descriptors, so the .proto sources
-# and _copy_stubs.sh, which regenerate them, stay in the checkout too.
+# and _copy_stubs.sh, which regenerate them, stay in the checkout too. So
+# do the protos' .pyi stubs: the package has no py.typed, so a type checker
+# would ignore them in an installed copy anyway.
 [tool.setuptools]
 include-package-data = false
 

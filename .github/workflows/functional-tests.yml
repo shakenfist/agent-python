@@ -55,17 +55,20 @@ jobs:
         id: filter
         if: github.event_name != 'workflow_dispatch'
         with:
-          # On merge_group there is no pull request payload, so make
-          # the comparison base explicit rather than letting the action
-          # infer one. develop is the queue's target branch, which by
-          # definition does not yet contain the queued changes, so a
-          # wrong code_changed=false -- the outcome that would let "Can
-          # merge" go green having tested nothing -- is structurally
-          # impossible; if develop advances mid-queue the diff only
-          # grows, erring toward running the tier. On pull_request
-          # events the action ignores base and compares against the
-          # pull request's base branch.
-          base: develop
+          # On merge_group, compare against the base_sha fixed in the
+          # event payload, the develop commit the queue built this
+          # entry on, not against the develop branch itself. The
+          # branch moves: once the queue has merged this entry, develop
+          # contains the queued commit, so a "Re-run all jobs" of the
+          # run -- the release recovery in docs/developer-guide.md --
+          # would diff against a base already holding HEAD, find
+          # nothing, and let "Can merge" go green having tested nothing.
+          # A re-run keeps its original payload, so it sees the same
+          # diff as the first attempt. On pull_request events the action
+          # ignores base and compares against the pull request's base
+          # branch; develop is only the fallback for an event with no
+          # merge_group payload.
+          base: ${{ github.event.merge_group.base_sha || 'develop' }}
           # By default a file matches the filter if it matches ANY listed
           # pattern, which makes '**' match everything and silently
           # defeats the exclusion. 'every' requires a file to match ALL
@@ -161,6 +164,8 @@ jobs:
           if-no-files-found: error
           path: cover.zip
 
+  # Deliberately outside the needs: of "Can enqueue" and "Can merge":
+  # it tests nothing, so there is nothing for it to gate.
   can_see_status:
     runs-on: [self-hosted, static]
     # Runs "true", so five minutes is generous even on a busy runner.
@@ -177,7 +182,8 @@ jobs:
   # well as a pull request, because the filter runs on both; a skip for
   # any other reason fails. The automated reviewer is advisory and
   # deliberately not in needs: it must not be able to block a merge on
-  # an API hiccup.
+  # an API hiccup. Keep the two needs: lists identical: a job in only
+  # one of them lets the queue merge without it.
   can_enqueue:
     name: "Can enqueue"
     needs:
@@ -235,7 +241,11 @@ jobs:
     # timeout, fork restriction, bot-commit check -- lives in the
     # shared workflow so it stays in step with the rest of the fleet.
     needs: [check_paths, sanity_checks]
+    # There is no pull request to review on merge_group or
+    # workflow_dispatch events. The shared workflow skips those too,
+    # but guarding here means a queue run never starts it.
     if: >-
+      github.event_name == 'pull_request' &&
       !cancelled() &&
       needs.check_paths.result == 'success' &&
       (needs.sanity_checks.result == 'success' ||
