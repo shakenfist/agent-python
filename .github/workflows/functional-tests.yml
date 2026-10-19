@@ -24,9 +24,11 @@ on:
     branches:
       - develop
 
+# Only automated_reviewer writes to pull requests, and it grants itself
+# that scope. A merge_group token is not downgraded for forks the way a
+# pull_request one is, so the default here stays read-only.
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   # Detect changes touching only docs/ so the vm lane below can skip
@@ -181,8 +183,10 @@ jobs:
   # well as a pull request, because the filter runs on both; a skip for
   # any other reason fails. The automated reviewer is advisory and
   # deliberately not in needs: it must not be able to block a merge on
-  # an API hiccup. Keep the two needs: lists identical: a job in only
-  # one of them lets the queue merge without it.
+  # an API hiccup. Keep the two needs: lists and the two Transform
+  # outcomes jq expressions identical: a job in only one list lets the
+  # queue merge without it, and a skip one expression accepts and the
+  # other does not makes the two checks disagree.
   can_enqueue:
     name: "Can enqueue"
     needs:

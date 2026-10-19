@@ -101,8 +101,11 @@ enqueue" check passes. The queue then runs `functional-tests.yml`
 again on the commit it is about to merge, and merges only when "Can
 merge" passes. That second run is the one a release counts (see
 below), so a change merged around the queue, by an administrator
-bypassing it, cannot be released until a later commit has gone through
-the queue. Both checks fail if any job failed, or was skipped for any
+bypassing it, cannot be released until a later queue entry that
+changes something outside `docs/` has gone through the queue. The gate
+reads only the tagged commit's own runs, and a docs-only entry skips
+`sanity_checks`, so its successful run would vouch for the bypassed
+change without testing it. Both checks fail if any job failed, or was skipped for any
 reason other than `check_paths` finding a docs-only change. A new job
 in `functional-tests.yml` goes in the `needs:` of both.
 

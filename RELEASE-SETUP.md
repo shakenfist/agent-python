@@ -101,8 +101,10 @@ report.
 5. Enable **Require status checks to pass**, and add "Can enqueue"
    and "Can merge", with **GitHub Actions** as the source
 6. Keep the bypass list short. A merge that bypasses the queue gets
-   no CI run, so it cannot be released until a later commit has gone
-   through the queue
+   no CI run, so it cannot be released until a later queue entry that
+   changes something outside `docs/` has gone through the queue: a
+   docs-only entry skips the tests, so its run does not cover the
+   bypassed change
 
 ### 5. Verify Sigstore/Rekor Access
 
