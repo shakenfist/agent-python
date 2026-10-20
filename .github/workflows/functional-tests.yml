@@ -7,26 +7,43 @@ name: Functional tests
 #
 # The can_enqueue / can_merge scheme is as described at:
 # https://boinkor.net/2023/11/neat-github-actions-patterns-for-github-merge-queues/
+# Both are the checks the merge queue's ruleset requires: can_enqueue
+# reports on pull requests, can_merge on merge queue entries, and each
+# is skipped (which GitHub treats as success) on the other event.
 
 on:
+  # pr-retest.yml re-runs this workflow by dispatching it.
   workflow_dispatch:
+  # Merges go through a merge queue, so every commit that lands on
+  # develop is the commit a merge_group run tested, even when its base
+  # moved after the pull request run. That run is the one release.yml's
+  # CI gate counts, which is why there is no push trigger: it would
+  # only test the same commit a second time.
+  merge_group:
   pull_request:
     branches:
       - develop
 
+# Only automated_reviewer writes to pull requests, and it grants itself
+# that scope. A merge_group token is not downgraded for forks the way a
+# pull_request one is, so the default here stays read-only.
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
-  # Detect pull requests touching only docs/ so the vm lane below can
-  # skip them. A filter job rather than trigger-level paths-ignore, as in
-  # kerbside: the workflow still reports on every pull request, so a
-  # required status check added later cannot be left waiting forever on
-  # a filtered one, and a skipped job satisfies a required check where a
-  # workflow that never ran does not. On workflow_dispatch -- which is
-  # how pr-retest.yml re-runs this -- the filter step is skipped and the
-  # output defaults to code_changed=true, so a retest always tests.
+  # Detect changes touching only docs/ so the vm lane below can skip
+  # them. A filter job rather than trigger-level paths-ignore, as in
+  # kerbside: can_enqueue and can_merge are required status checks, and
+  # a required check in a paths-ignore'd workflow never reports on a
+  # filtered change, which blocks the merge forever, while a skipped one
+  # satisfies it. With a filter job the workflow always reports and the
+  # vm lane skips on its output.
+  #
+  # The filter runs on merge_group as well as pull_request, so a
+  # docs-only queue entry skips the vm lane too. On workflow_dispatch --
+  # which is how pr-retest.yml re-runs this -- the filter step is skipped
+  # and the output defaults to code_changed=true, so a retest always
+  # tests.
   check_paths:
     name: "Check paths"
     runs-on: [self-hosted, static]
@@ -40,6 +57,20 @@ jobs:
         id: filter
         if: github.event_name != 'workflow_dispatch'
         with:
+          # On merge_group, compare against the base_sha fixed in the
+          # event payload, the develop commit the queue built this
+          # entry on, not against the develop branch itself. The
+          # branch moves: once the queue has merged this entry, develop
+          # contains the queued commit, so a "Re-run all jobs" of the
+          # run would diff against a base already holding HEAD, find
+          # nothing, and let "Can merge" go green having tested nothing,
+          # a run the release gate would then accept.
+          # A re-run keeps its original payload, so it sees the same
+          # diff as the first attempt. On pull_request events the action
+          # ignores base and compares against the pull request's base
+          # branch; develop is only the fallback for an event with no
+          # merge_group payload.
+          base: ${{ github.event.merge_group.base_sha || 'develop' }}
           # By default a file matches the filter if it matches ANY listed
           # pattern, which makes '**' match everything and silently
           # defeats the exclusion. 'every' requires a file to match ALL
@@ -67,8 +98,23 @@ jobs:
     # The timed steps sum to 35 minutes; the rest is headroom for the
     # checkout and the artifact upload.
     timeout-minutes: 45
+    # On a merge group, key on the base branch rather than github.ref,
+    # which is a new queue branch on every rebuild, so a superseded run
+    # is cancelled. That is safe because the queue is serial
+    # (max_entries_to_build: 1): any other first attempt of a
+    # merge_group run has already been abandoned. A re-run is not a
+    # queue build, though. It keeps its original event, so with the
+    # base-branch key a "Re-run jobs" on an old queue run would cancel
+    # the live queue entry or be cancelled by it. Re-runs therefore keep
+    # their own queue branch's group. The merge_group- prefix keeps a
+    # queue run out of a workflow_dispatch run's group on develop, whose
+    # github.ref is the same string.
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-lint
+      group: >-
+        ${{ github.workflow }}-lint-${{
+        github.event_name == 'merge_group' && github.run_attempt == '1'
+        && format('merge_group-{0}', github.event.merge_group.base_ref)
+        || github.ref }}
       cancel-in-progress: true
 
     steps:
@@ -119,6 +165,8 @@ jobs:
           if-no-files-found: error
           path: cover.zip
 
+  # Deliberately outside the needs: of "Can enqueue" and "Can merge":
+  # it tests nothing, so there is nothing for it to gate.
   can_see_status:
     runs-on: [self-hosted, static]
     # Runs "true", so five minutes is generous even on a busy runner.
@@ -127,24 +175,70 @@ jobs:
       - name: "Immediate success"
         run: true
 
-  can_merge:
+  # The two checks the merge queue's ruleset requires, collecting this
+  # workflow's jobs into one result each. Every need must succeed, with
+  # one exception: sanity_checks may be skipped, but only when
+  # check_paths succeeded and reported a docs-only change, which is the
+  # one reason it is ever skipped. That holds on a merge queue entry as
+  # well as a pull request, because the filter runs on both; a skip for
+  # any other reason fails. The automated reviewer is advisory and
+  # deliberately not in needs: it must not be able to block a merge on
+  # an API hiccup. Keep the two needs: lists and the two Transform
+  # outcomes jq expressions identical: a job in only one list lets the
+  # queue merge without it, and a skip one expression accepts and the
+  # other does not makes the two checks disagree.
+  can_enqueue:
+    name: "Can enqueue"
     needs:
       - check_paths
       - sanity_checks
-    if: always()
-    permissions:
-      actions: read
+    # always(), not !cancelled(): if the run is cancelled as a
+    # whole, this must still run and fail on the cancelled needs.
+    # A skipped check satisfies a required one, so a skip here
+    # would let an untested commit through.
+    if: ${{ always() && github.event_name != 'merge_group' }}
+    # The steps read only the needs context, so the token needs nothing.
+    permissions: {}
     runs-on: [self-hosted, static]
     # A jq one-liner over the needs context.
     timeout-minutes: 5
     steps:
-      - env:
-          NEEDS_JSON: "${{toJSON(needs)}}"
-        name: Transform outcomes
+      - name: Transform outcomes
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          echo "ALL_SUCCESS=$(echo "$NEEDS_JSON" | jq '. | to_entries | map([.value.result == "success", .value.result == "skipped"] | any) | all')" >>$GITHUB_ENV
+          echo "ALL_SUCCESS=$(echo "${NEEDS_JSON}" | jq '(.check_paths.outputs.code_changed == "false") as $docs_only | to_entries | map(.value.result == "success" or (.key == "sanity_checks" and .value.result == "skipped" and $docs_only)) | all')" >> "${GITHUB_ENV}"
       - name: Check outcomes
-        run: "[ $ALL_SUCCESS == true ]"
+        run: |
+          [ "${ALL_SUCCESS}" == true ]
+
+  can_merge:
+    name: "Can merge"
+    needs:
+      - check_paths
+      - sanity_checks
+    # always(), not !cancelled(): if the run is cancelled as a
+    # whole, this must still run and fail on the cancelled needs.
+    # A skipped check satisfies a required one, so a skip here
+    # would let an untested commit through.
+    if: ${{ always() && github.event_name == 'merge_group' }}
+    # The steps read only the needs context, so the token needs nothing.
+    permissions: {}
+    runs-on: [self-hosted, static]
+    # A jq one-liner over the needs context.
+    timeout-minutes: 5
+    steps:
+      # This run is the one release.yml's CI gate counts, so a job that
+      # skipped here for any reason but a docs-only change would let an
+      # untested commit reach a release.
+      - name: Transform outcomes
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          echo "ALL_SUCCESS=$(echo "${NEEDS_JSON}" | jq '(.check_paths.outputs.code_changed == "false") as $docs_only | to_entries | map(.value.result == "success" or (.key == "sanity_checks" and .value.result == "skipped" and $docs_only)) | all')" >> "${GITHUB_ENV}"
+      - name: Check outcomes
+        run: |
+          [ "${ALL_SUCCESS}" == true ]
 
   automated_reviewer:
     name: "Automated reviewer"
@@ -158,7 +252,11 @@ jobs:
     # timeout, fork restriction, bot-commit check -- lives in the
     # shared workflow so it stays in step with the rest of the fleet.
     needs: [check_paths, sanity_checks]
+    # There is no pull request to review on merge_group or
+    # workflow_dispatch events. The shared workflow skips those too,
+    # but guarding here means a queue run never starts it.
     if: >-
+      github.event_name == 'pull_request' &&
       !cancelled() &&
       needs.check_paths.result == 'success' &&
       (needs.sanity_checks.result == 'success' ||

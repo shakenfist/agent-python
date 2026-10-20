@@ -35,6 +35,24 @@ dependencies = [
 [project.scripts]
 sf-agent = "shakenfist_agent.main:cli"
 
+# The tests run from the checkout and must not ship. The exclude below
+# drops them as a package, but include-package-data defaults to true under
+# pyproject.toml and setuptools_scm's file finder offers every git-tracked
+# file as package data, so they would come straight back as data without
+# this. Nothing in this package reads a data file at runtime: the
+# generated *_pb2 modules embed their descriptors, so the .proto sources
+# and _copy_stubs.sh, which regenerate them, stay in the checkout too. So
+# do the protos' .pyi stubs: the package has no py.typed, so a type checker
+# would ignore them in an installed copy anyway.
+[tool.setuptools]
+include-package-data = false
+
+# commandline/ and protos/ have no __init__.py; namespaces (the default
+# here) is what finds them.
+[tool.setuptools.packages.find]
+include = ["shakenfist_agent*"]
+exclude = ["shakenfist_agent.tests*"]
+
 [tool.setuptools_scm]
 git_describe_command = "git describe --dirty --tags --match v* --first-parent"
 write_to = "shakenfist_agent/_version.py"
